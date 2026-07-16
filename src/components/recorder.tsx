@@ -48,14 +48,11 @@ export function Recorder() {
 
   const beginRecording = async () => {
     try {
-      const displayStream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: 30 } },
+      const constraints: MediaStreamConstraints & Record<string, unknown> = {
+        video: { frameRate: { ideal: 30 }, displaySurface: MODES.find((m) => m.id === mode)?.hint },
         audio: sys,
-        // @ts-expect-error non-standard hint
-        preferCurrentTab: false,
-        // @ts-expect-error surface hint accepted by Chrome
-        displaySurface: MODES.find((m) => m.id === mode)?.hint,
-      });
+      };
+      const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
 
       let combined = displayStream;
       if (mic) {
