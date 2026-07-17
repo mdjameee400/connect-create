@@ -128,6 +128,16 @@ export function Recorder() {
     const user = userData.user;
     if (!user) { toast.error("Session expired"); setState("idle"); return; }
 
+    // Stamp recording with the user's primary team so teammates see it
+    const { data: teamRow } = await supabase
+      .from("team_members")
+      .select("team_id")
+      .eq("user_id", user.id)
+      .order("joined_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const teamId = teamRow?.team_id ?? null;
+
     const id = crypto.randomUUID();
     const path = `${user.id}/${id}.webm`;
 
@@ -136,6 +146,7 @@ export function Recorder() {
     const { data: row, error: dbErr } = await supabase.from("recordings").insert({
       id,
       user_id: user.id,
+      team_id: teamId,
       title,
       storage_path: path,
       duration_seconds: durationSec,
