@@ -17,12 +17,17 @@ function Library() {
     queryKey: ["recordings"],
     queryFn: async () => {
       const { data: userData } = await supabase.auth.getUser();
-      const myId = userData.user?.id;
-      const { data, error } = await supabase.from("recordings")
-        .select("*, profiles:user_id(display_name)")
-        .order("created_at", { ascending: false });
+      const myId = userData.user?.id ?? null;
+      const { data: rows, error } = await supabase.from("recordings")
+        .select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      return { rows: data, myId };
+      const otherIds = Array.from(new Set((rows ?? []).map((r) => r.user_id).filter((id) => id !== myId)));
+      let names: Record<string, string> = {};
+      if (otherIds.length) {
+        const { data: profiles } = await supabase.from("profiles").select("id, display_name").in("id", otherIds);
+        names = Object.fromEntries((profiles ?? []).map((p) => [p.id, p.display_name ?? "Teammate"]));
+      }
+      return { rows: rows ?? [], myId, names };
     },
   });
 
