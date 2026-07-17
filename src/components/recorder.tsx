@@ -133,7 +133,7 @@ export function Recorder() {
       .from("team_members")
       .select("team_id")
       .eq("user_id", user.id)
-      .order("joined_at", { ascending: true })
+      .order("joined_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     const teamId = teamRow?.team_id ?? null;
