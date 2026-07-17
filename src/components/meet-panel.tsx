@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, Copy, Video, Plus, UserPlus, Loader2, ExternalLink } from "lucide-react";
+import { Users, Copy, Plus, UserPlus, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
