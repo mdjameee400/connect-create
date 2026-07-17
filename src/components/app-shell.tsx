@@ -121,9 +121,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-3 pb-4 space-y-2">
           <Button
             className="w-full gap-2"
-            onClick={() => toast.info("Live calling — coming soon")}
+            onClick={() => quickCall.mutate()}
+            disabled={quickCall.isPending || !team}
           >
-            <Phone className="w-4 h-4" /> Quick Call
+            {quickCall.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
+            Quick Call
           </Button>
           <button
             type="button"
