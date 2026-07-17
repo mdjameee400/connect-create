@@ -32,7 +32,7 @@ export async function fetchCurrentTeam(): Promise<CurrentTeam | null> {
     .from("team_members")
     .select("role, joined_at, teams!inner(id, name, owner_id)")
     .eq("user_id", userData.user.id)
-    .order("joined_at", { ascending: true })
+    .order("joined_at", { ascending: false })
     .limit(1)
     .maybeSingle();
   if (error || !data) return null;
