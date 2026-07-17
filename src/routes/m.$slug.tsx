@@ -35,18 +35,23 @@ function MeetingPage() {
     (async () => {
       const { data, error } = await supabase
         .from("meetings")
-        .select("id, title, starts_at, duration_minutes, notes, profiles:created_by(display_name)")
+        .select("id, title, starts_at, duration_minutes, notes, created_by")
         .eq("room_slug", slug)
         .maybeSingle();
       if (error || !data) { setMeeting(null); return; }
-      const p = data.profiles as unknown as { display_name: string | null } | null;
+      let host: string | null = null;
+      if (data.created_by) {
+        const { data: p } = await supabase
+          .from("profiles").select("display_name").eq("id", data.created_by).maybeSingle();
+        host = p?.display_name ?? null;
+      }
       setMeeting({
         id: data.id,
         title: data.title,
         starts_at: data.starts_at,
         duration_minutes: data.duration_minutes,
         notes: data.notes,
-        host_name: p?.display_name ?? null,
+        host_name: host,
       });
     })();
   }, [slug]);
