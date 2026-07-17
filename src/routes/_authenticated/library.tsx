@@ -16,10 +16,13 @@ function Library() {
   const { data, isLoading } = useQuery({
     queryKey: ["recordings"],
     queryFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const myId = userData.user?.id;
       const { data, error } = await supabase.from("recordings")
-        .select("*").order("created_at", { ascending: false });
+        .select("*, profiles:user_id(display_name)")
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      return { rows: data, myId };
     },
   });
 
