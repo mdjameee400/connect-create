@@ -1,12 +1,13 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, PlaySquare, Calendar, Settings, Phone, HelpCircle, LogOut, Search, Bell, Video } from "lucide-react";
+import { LayoutGrid, PlaySquare, Calendar, Settings, Phone, HelpCircle, LogOut, Search, Bell, Video, Loader2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { pingPresence, makeSlug, useCurrentTeam } from "@/lib/team";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -19,6 +20,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: team } = useCurrentTeam();
   const [profile, setProfile] = useState<{ name: string; email: string; avatar: string | null }>({
     name: "You", email: "", avatar: null,
   });
@@ -36,6 +38,43 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     })();
   }, []);
+
+  // Presence: ping on mount and every 2 minutes
+  useEffect(() => {
+    pingPresence();
+    const t = setInterval(pingPresence, 2 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const quickCall = useMutation({
+    mutationFn: async () => {
+      if (!team) throw new Error("No team");
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) throw new Error("Not signed in");
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const slug = makeSlug();
+        const { data, error } = await supabase.from("meetings").insert({
+          team_id: team.id,
+          created_by: userData.user.id,
+          title: "Quick call",
+          starts_at: new Date().toISOString(),
+          duration_minutes: 30,
+          room_slug: slug,
+        }).select("room_slug").single();
+        if (!error && data) return data;
+        if (error && !error.message.includes("room_slug")) throw error;
+      }
+      throw new Error("Could not create call");
+    },
+    onSuccess: async (m) => {
+      const url = `${window.location.origin}/m/${m.room_slug}`;
+      try { await navigator.clipboard.writeText(url); toast.success("Join link copied", { description: url }); }
+      catch { toast.success("Call created"); }
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      navigate({ to: "/m/$slug", params: { slug: m.room_slug } });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   const signOut = async () => {
     await queryClient.cancelQueries();
@@ -82,9 +121,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-3 pb-4 space-y-2">
           <Button
             className="w-full gap-2"
-            onClick={() => toast.info("Live calling — coming soon")}
+            onClick={() => quickCall.mutate()}
+            disabled={quickCall.isPending || !team}
           >
-            <Phone className="w-4 h-4" /> Quick Call
+            {quickCall.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
+            Quick Call
           </Button>
           <button
             type="button"

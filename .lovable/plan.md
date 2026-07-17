@@ -1,78 +1,111 @@
-## Orbital Connect — Web MVP
+# Collaboration + Scheduled Meetings
 
-A light-themed productivity dashboard (matching image 2) with a fully working screen recorder, cloud-backed library, and shareable playback links. Live video calls and calendar/teammates data are UI-only placeholders in this phase.
+Two connected features layered onto the existing Orbital Connect MVP.
 
-### Scope
+## 1. Teams & teammate invitations
 
-**Built for real:**
-- Screen recording (Full Screen / Window / Region via `getDisplayMedia`)
-- Mic + system audio toggles, live preview, 3-2-1 countdown, stop/pause
-- Auth (email/password + Google) via Lovable Cloud
-- Recordings upload to Cloud storage; metadata stored in Postgres
-- Public share page `/v/:id` with video player (Loom-style)
-- Library page: list of user's recordings, copy link, delete, rename
-- "Copy link" appears within ~2s of stop (upload continues in background)
+Introduce a lightweight **team** concept (one team per owner to start). The owner invites teammates by email; invitees accept via a magic link and join the team. Every recording created by any team member is visible to the whole team in the Library.
 
-**Mocked / UI only (clearly labeled):**
-- Meet pane (Instant Meeting, Scheduled Today, Active Teammates)
-- Calendar page
-- Settings page (basic profile only)
+### Data model (new tables)
 
-### Design
+```text
+teams
+  id uuid pk
+  name text                 -- defaults to "<owner name>'s team"
+  owner_id uuid → auth.users
+  created_at timestamptz
 
-Match image 2 exactly:
-- Left sidebar (Dashboard / Library / Calendar / Settings, Quick Call CTA, Help / Sign Out at bottom)
-- Top search bar + notifications + help + avatar
-- Two-column dashboard: **Record** (left) and **Meet** (right)
-- Green primary (Orbital green), blue accent for Instant Meeting card
-- Inter/SF-style sans, rounded cards, soft shadows, light grey background
+team_members
+  team_id uuid → teams
+  user_id uuid → auth.users
+  role text ('owner' | 'member')
+  joined_at timestamptz
+  pk (team_id, user_id)
 
-### Pages / Routes
-
+team_invites
+  id uuid pk
+  team_id uuid → teams
+  email citext
+  token uuid (unique, url-safe)
+  invited_by uuid → auth.users
+  status text ('pending' | 'accepted' | 'revoked')
+  created_at, accepted_at timestamptz
 ```
-/                       → redirect to /dashboard (or /auth if signed out)
-/auth                   → sign in / sign up
-/_authenticated/dashboard   → Record + Meet split view (main screen from image 2)
-/_authenticated/library     → grid/list of recordings
-/_authenticated/calendar    → placeholder
-/_authenticated/settings    → profile
-/v/$id                  → public share page for a recording
-```
+
+`recordings` gains a nullable `team_id uuid` column. New recordings are stamped with the creator's active team. Library query returns recordings where `user_id = auth.uid()` **OR** `team_id IN (my teams)`.
+
+### RLS
+
+- `teams`: members SELECT; owner UPDATE/DELETE.
+- `team_members`: members SELECT own team rows; owner INSERT/DELETE (via server fn).
+- `team_invites`: owner full CRUD; anon can SELECT by exact `token` (for the accept page).
+- `recordings`: existing owner policy + new "team members can SELECT" policy using a `SECURITY DEFINER` `is_team_member(team_id, uid)` helper to avoid RLS recursion.
+
+Helper migration also seeds a personal team for each existing user via a backfill and adds a trigger on `handle_new_user` so new signups get one automatically.
+
+### Server functions
+
+- `inviteTeammate({ email })` — owner-only; creates `team_invites` row, returns share URL `/invite/:token`. (No email sending in this phase — owner copies the link and shares it, same "instant share link" pattern as recordings.)
+- `acceptInvite({ token })` — authenticated; inserts `team_members`, marks invite accepted, redirects to `/dashboard`.
+- `revokeInvite({ id })` / `removeMember({ userId })` — owner-only.
+- `listTeammates()` — returns members + pending invites for the Meet panel.
+
+### UI
+
+- **Meet panel → Active Teammates** becomes real: shows accepted members with avatars + presence dot (online = signed-in in last 5 min, tracked via `profiles.last_seen_at` bumped on app load). "Invite" button opens a dialog: email input → creates invite → auto-copies `/invite/:token` link to clipboard and toasts "Invite link copied".
+- **Settings → Team** section: list members, pending invites, revoke / remove actions.
+- **Library**: unchanged UI, but rows now include teammates' recordings with a small "by <name>" line under the title.
+- **New route `/invite/$token`**: public; if signed out shows a "Sign in to join <team name>" CTA that routes through `/auth?redirect=/invite/<token>`; if signed in, one-click "Join team" button.
+
+## 2. Real scheduled meetings
+
+Replace the placeholder "Scheduled Today" / "Coming soon" stubs with real meeting records.
 
 ### Data model
 
-```
-recordings
+```text
+meetings
   id uuid pk
-  user_id uuid → auth.users
+  team_id uuid → teams
+  created_by uuid → auth.users
   title text
-  storage_path text          -- path in 'recordings' bucket
-  duration_seconds int
-  size_bytes bigint
-  mime_type text
-  thumbnail_path text nullable
-  created_at timestamptz
-  view_count int default 0
-  is_public bool default true
+  starts_at timestamptz
+  duration_minutes int
+  room_slug text unique       -- short random slug for the join URL
+  notes text
+  created_at, updated_at timestamptz
 ```
 
-RLS: owner full CRUD; anon SELECT only when `is_public = true` (public share page reads via server function).
+RLS: members of the team can SELECT/INSERT/UPDATE/DELETE their team's meetings.
 
-Storage: `recordings` bucket (public read for MVP simplicity of share links).
+### Server functions / actions
 
-### Technical notes
+- `createMeeting({ title, starts_at, duration_minutes, notes })` — inserts row, generates unique 8-char `room_slug`, returns `{ id, join_url: '/m/<slug>' }`.
+- `listMeetings({ range })` — upcoming or by date range.
+- `deleteMeeting({ id })`.
 
-- Recorder uses `MediaRecorder` with `video/webm; codecs=vp9` (fallback to vp8), same pattern as the HTML you provided.
-- After Stop: create DB row → generate share URL immediately → kick off upload in background → update row with final size/duration when done.
-- Share URL format: `https://<app>/v/<id>` — copied to clipboard the instant recording stops.
-- Server functions handle: create recording row, get signed upload URL, finalize upload, fetch public recording.
-- All Meet-side buttons show a toast "Live calling coming soon" so nothing looks broken.
+### UI
 
-### Out of scope this phase
-- WebRTC live calls / LiveKit
-- Real teammates presence
-- Calendar integration
-- Video trimming/editing
-- Thumbnails (placeholder tile for now)
+- **Meet panel**:
+  - "Instant Meeting" → creates a meeting with `starts_at = now()`, copies join URL, navigates to `/m/:slug`.
+  - "Schedule" button → opens a compact dialog (title, date, time, duration, optional notes) → creates meeting → toast + copyable link.
+  - "Scheduled Today" list becomes live: shows today's team meetings with time, title, "Copy link" and "Join".
+- **Calendar page** replaces the placeholder with:
+  - Month grid highlighting days that have meetings.
+  - Right pane listing that day's meetings with join / edit / delete actions.
+  - "New meeting" button in the header.
+- **New public route `/m/$slug`**: shows meeting title, host, start time, and a big **Join** button. The join screen itself remains a stub ("Live call room — video calling coming in the next phase") since real WebRTC/LiveKit was explicitly out of scope; the value delivered now is real meeting records + shareable join URLs + calendar integration, matching how Loom/Calendly links behave before the room opens.
+
+### Design
+
+Everything reuses the existing light dashboard style: green primary, soft cards, rounded inputs, blue accent for "Instant Meeting". Dialogs use existing shadcn `Dialog` component. No new visual language.
+
+## Out of scope (explicitly, this phase)
+
+- Sending invite emails via SMTP (owner shares the copied link — matches the app's core "instant link" pattern).
+- Actual WebRTC video inside the meeting room (`/m/:slug` shows meeting info + placeholder for now).
+- Recurring meetings, calendar sync (Google/Outlook), timezone picker (uses browser timezone).
+- Multiple teams per user / switching teams.
+- Roles beyond owner/member.
 
 Ready to build on approval.

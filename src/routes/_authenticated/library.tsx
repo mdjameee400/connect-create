@@ -16,10 +16,18 @@ function Library() {
   const { data, isLoading } = useQuery({
     queryKey: ["recordings"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("recordings")
+      const { data: userData } = await supabase.auth.getUser();
+      const myId = userData.user?.id ?? null;
+      const { data: rows, error } = await supabase.from("recordings")
         .select("*").order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
+      const otherIds = Array.from(new Set((rows ?? []).map((r) => r.user_id).filter((id) => id !== myId)));
+      let names: Record<string, string> = {};
+      if (otherIds.length) {
+        const { data: profiles } = await supabase.from("profiles").select("id, display_name").in("id", otherIds);
+        names = Object.fromEntries((profiles ?? []).map((p) => [p.id, p.display_name ?? "Teammate"]));
+      }
+      return { rows: rows ?? [], myId, names };
     },
   });
 
@@ -49,7 +57,7 @@ function Library() {
 
       {isLoading ? (
         <div className="grid place-items-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
-      ) : !data?.length ? (
+      ) : !data?.rows.length ? (
         <Card className="p-12 text-center">
           <PlaySquare className="w-10 h-10 mx-auto text-muted-foreground/60 mb-3" />
           <p className="font-medium">No recordings yet</p>
@@ -57,7 +65,7 @@ function Library() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {data.map((r) => (
+          {data.rows.map((r) => (
             <Card key={r.id} className="overflow-hidden group p-0">
               <Link to="/v/$id" params={{ id: r.id }} className="block aspect-video bg-slate-900 relative">
                 <div className="absolute inset-0 grid place-items-center text-slate-500">
@@ -79,6 +87,7 @@ function Library() {
                 <div className="font-medium text-sm truncate">{r.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
                   {formatDistanceToNow(new Date(r.created_at), { addSuffix: true })} · {fmtSize(r.size_bytes)}
+                  {r.user_id !== data.myId && <> · by {data.names[r.user_id] ?? "Teammate"}</>}
                 </div>
                 <div className="mt-3 flex gap-1">
                   <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => copy(r.id)}>
@@ -89,10 +98,12 @@ function Library() {
                       <ExternalLink className="w-3.5 h-3.5" /> Open
                     </Link>
                   </Button>
-                  <Button size="icon" variant="ghost" className="ml-auto w-8 h-8"
-                    onClick={() => { if (confirm("Delete this recording?")) del.mutate({ id: r.id, storage_path: r.storage_path }); }}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
+                  {r.user_id === data.myId && (
+                    <Button size="icon" variant="ghost" className="ml-auto w-8 h-8"
+                      onClick={() => { if (confirm("Delete this recording?")) del.mutate({ id: r.id, storage_path: r.storage_path }); }}>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </Card>
