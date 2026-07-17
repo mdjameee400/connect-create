@@ -51,23 +51,25 @@ export function useCurrentTeam() {
 export async function fetchTeammates(teamId: string): Promise<TeamMember[]> {
   const { data, error } = await supabase
     .from("team_members")
-    .select("user_id, role, joined_at, profiles!inner(display_name, avatar_url, last_seen_at)")
+    .select("user_id, role, joined_at")
     .eq("team_id", teamId)
     .order("joined_at", { ascending: true });
   if (error || !data) return [];
+  const ids = data.map((r) => r.user_id);
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, display_name, avatar_url, last_seen_at")
+    .in("id", ids);
+  const profMap = new Map((profiles ?? []).map((p) => [p.id, p]));
   return data.map((r) => {
-    const p = r.profiles as unknown as {
-      display_name: string | null;
-      avatar_url: string | null;
-      last_seen_at: string | null;
-    };
+    const p = profMap.get(r.user_id);
     return {
       user_id: r.user_id,
       role: r.role as "owner" | "member",
       joined_at: r.joined_at,
-      display_name: p.display_name,
-      avatar_url: p.avatar_url,
-      last_seen_at: p.last_seen_at,
+      display_name: p?.display_name ?? null,
+      avatar_url: p?.avatar_url ?? null,
+      last_seen_at: p?.last_seen_at ?? null,
     };
   });
 }
