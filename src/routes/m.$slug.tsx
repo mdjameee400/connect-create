@@ -32,6 +32,25 @@ function MeetingPage() {
   const { slug } = Route.useParams();
   const [meeting, setMeeting] = useState<Meeting | null | undefined>(undefined);
   const [inRoom, setInRoom] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const user = userRes.user;
+      if (user) {
+        const { data: p } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+        const name = p?.display_name || (user.email ? user.email.split("@")[0] : "") || "Guest";
+        setDisplayName(name);
+        setNameDraft(name);
+      } else {
+        const saved = typeof window !== "undefined" ? localStorage.getItem("orbital.guestName") : null;
+        if (saved) { setDisplayName(saved); setNameDraft(saved); }
+      }
+    })();
+  }, []);
+
 
   useEffect(() => {
     (async () => {
