@@ -140,15 +140,31 @@ function MeetingPage() {
                 {meeting.notes}
               </div>
             )}
+            <div className="mt-5">
+              <label className="text-xs font-medium text-white/70">Your name</label>
+              <Input
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder="Enter your name"
+                className="mt-1 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+              />
+            </div>
             <Button
               size="lg"
-              className="w-full mt-6 gap-2"
-              onClick={() => setInRoom(true)}
-              disabled={status === "ended"}
+              className="w-full mt-4 gap-2"
+              onClick={() => {
+                const n = nameDraft.trim();
+                if (!n) { toast.error("Enter a name to join"); return; }
+                setDisplayName(n);
+                try { localStorage.setItem("orbital.guestName", n); } catch { /* ignore */ }
+                setInRoom(true);
+              }}
+              disabled={status === "ended" || !nameDraft.trim()}
             >
               <Video className="w-4 h-4" />
               {status === "ended" ? "Meeting ended" : "Join room"}
             </Button>
+
             <Button variant="ghost" className="w-full mt-2 text-white/70 hover:text-white gap-1.5" onClick={copy}>
               <Copy className="w-3.5 h-3.5" /> Copy join link
             </Button>
