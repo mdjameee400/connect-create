@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Video, Loader2, Copy, Calendar, Clock, Users } from "lucide-react";
 import { toast } from "sonner";
+import { MeetingRoom } from "@/components/meeting-room";
 
 export const Route = createFileRoute("/m/$slug")({
   ssr: false,
@@ -30,6 +32,25 @@ function MeetingPage() {
   const { slug } = Route.useParams();
   const [meeting, setMeeting] = useState<Meeting | null | undefined>(undefined);
   const [inRoom, setInRoom] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const [nameDraft, setNameDraft] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const user = userRes.user;
+      if (user) {
+        const { data: p } = await supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle();
+        const name = p?.display_name || (user.email ? user.email.split("@")[0] : "") || "Guest";
+        setDisplayName(name);
+        setNameDraft(name);
+      } else {
+        const saved = typeof window !== "undefined" ? localStorage.getItem("orbital.guestName") : null;
+        if (saved) { setDisplayName(saved); setNameDraft(saved); }
+      }
+    })();
+  }, []);
+
 
   useEffect(() => {
     (async () => {
@@ -89,31 +110,7 @@ function MeetingPage() {
 
       <main className="flex-1 grid place-items-center px-4 py-8">
         {inRoom ? (
-          <div className="w-full max-w-4xl">
-            <div className="aspect-video bg-slate-900 rounded-xl border border-white/10 grid place-items-center text-center px-6">
-              <div>
-                <div className="w-16 h-16 mx-auto rounded-full bg-brand/20 grid place-items-center mb-4">
-                  <Video className="w-7 h-7 text-brand" />
-                </div>
-                <h2 className="text-xl font-semibold">You're in the room</h2>
-                <p className="text-white/60 text-sm mt-2 max-w-md mx-auto">
-                  Live video and audio are coming in the next release. Share this link so your teammates can join the same room when it goes live.
-                </p>
-                <Button variant="secondary" size="sm" className="mt-6 gap-1.5" onClick={copy}>
-                  <Copy className="w-3.5 h-3.5" /> Copy join link
-                </Button>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-white/70">
-                <span className="font-medium text-white">{meeting.title}</span>
-                {meeting.host_name && <> · hosted by {meeting.host_name}</>}
-              </div>
-              <Button variant="ghost" className="text-white/70 hover:text-white" onClick={() => setInRoom(false)}>
-                Leave
-              </Button>
-            </div>
-          </div>
+          <MeetingRoom slug={slug} displayName={displayName || "Guest"} onLeave={() => setInRoom(false)} />
         ) : (
           <Card className="w-full max-w-lg p-8 bg-slate-900 border-white/10 text-white">
             <div className="text-[11px] font-semibold tracking-wider text-brand mb-2">
@@ -137,20 +134,37 @@ function MeetingPage() {
                 Team meeting
               </div>
             </div>
+
             {meeting.notes && (
               <div className="mt-4 p-3 bg-white/5 rounded-lg text-sm text-white/80 whitespace-pre-wrap">
                 {meeting.notes}
               </div>
             )}
+            <div className="mt-5">
+              <label className="text-xs font-medium text-white/70">Your name</label>
+              <Input
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+                placeholder="Enter your name"
+                className="mt-1 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+              />
+            </div>
             <Button
               size="lg"
-              className="w-full mt-6 gap-2"
-              onClick={() => setInRoom(true)}
-              disabled={status === "ended"}
+              className="w-full mt-4 gap-2"
+              onClick={() => {
+                const n = nameDraft.trim();
+                if (!n) { toast.error("Enter a name to join"); return; }
+                setDisplayName(n);
+                try { localStorage.setItem("orbital.guestName", n); } catch { /* ignore */ }
+                setInRoom(true);
+              }}
+              disabled={status === "ended" || !nameDraft.trim()}
             >
               <Video className="w-4 h-4" />
               {status === "ended" ? "Meeting ended" : "Join room"}
             </Button>
+
             <Button variant="ghost" className="w-full mt-2 text-white/70 hover:text-white gap-1.5" onClick={copy}>
               <Copy className="w-3.5 h-3.5" /> Copy join link
             </Button>
