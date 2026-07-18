@@ -3,8 +3,10 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Video, Loader2, Copy, Calendar, Clock, Users } from "lucide-react";
 import { toast } from "sonner";
+import { MeetingRoom } from "@/components/meeting-room";
 
 export const Route = createFileRoute("/m/$slug")({
   ssr: false,
