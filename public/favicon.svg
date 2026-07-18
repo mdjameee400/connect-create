@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Background -->
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <!-- Orbit ring -->
+  <ellipse cx="32" cy="32" rx="24" ry="10" stroke="#22c55e" stroke-width="2" stroke-dasharray="4 3" fill="none" transform="rotate(-20 32 32)" opacity="0.6"/>
+  <!-- Center circle -->
+  <circle cx="32" cy="32" r="14" fill="#16a34a" opacity="0.15"/>
+  <!-- Video camera icon -->
+  <rect x="18" y="24" width="20" height="16" rx="3" fill="#22c55e"/>
+  <path d="M38 27.5l8-4v17l-8-4V27.5z" fill="#4ade80"/>
+  <!-- Glow dot on orbit -->
+  <circle cx="54" cy="28" r="3" fill="#86efac"/>
+</svg>

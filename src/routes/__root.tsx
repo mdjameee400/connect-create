@@ -68,7 +68,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Orbital Connect — Async recording & live sync in one hub" },
+      { title: "Orbital Connect — Async recording & live video" },
       { name: "description", content: "Record quick screen walkthroughs or hop on a live call — Orbital Connect unifies async video and sync meetings in one workspace." },
       { property: "og:title", content: "Orbital Connect" },
       { property: "og:description", content: "Async recording and live video calls in a single desktop workspace." },
@@ -77,7 +77,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     ],
     links: [
       { rel: "stylesheet", href: appCss },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "apple-touch-icon", href: "/logo.png" },
       { rel: "preconnect", href: "https://rsms.me" },
       { rel: "stylesheet", href: "https://rsms.me/inter/inter.css" },
     ],
