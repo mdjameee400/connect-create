@@ -110,31 +110,7 @@ function MeetingPage() {
 
       <main className="flex-1 grid place-items-center px-4 py-8">
         {inRoom ? (
-          <div className="w-full max-w-4xl">
-            <div className="aspect-video bg-slate-900 rounded-xl border border-white/10 grid place-items-center text-center px-6">
-              <div>
-                <div className="w-16 h-16 mx-auto rounded-full bg-brand/20 grid place-items-center mb-4">
-                  <Video className="w-7 h-7 text-brand" />
-                </div>
-                <h2 className="text-xl font-semibold">You're in the room</h2>
-                <p className="text-white/60 text-sm mt-2 max-w-md mx-auto">
-                  Live video and audio are coming in the next release. Share this link so your teammates can join the same room when it goes live.
-                </p>
-                <Button variant="secondary" size="sm" className="mt-6 gap-1.5" onClick={copy}>
-                  <Copy className="w-3.5 h-3.5" /> Copy join link
-                </Button>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center justify-between">
-              <div className="text-sm text-white/70">
-                <span className="font-medium text-white">{meeting.title}</span>
-                {meeting.host_name && <> · hosted by {meeting.host_name}</>}
-              </div>
-              <Button variant="ghost" className="text-white/70 hover:text-white" onClick={() => setInRoom(false)}>
-                Leave
-              </Button>
-            </div>
-          </div>
+          <MeetingRoom slug={slug} displayName={displayName || "Guest"} onLeave={() => setInRoom(false)} />
         ) : (
           <Card className="w-full max-w-lg p-8 bg-slate-900 border-white/10 text-white">
             <div className="text-[11px] font-semibold tracking-wider text-brand mb-2">
@@ -158,6 +134,7 @@ function MeetingPage() {
                 Team meeting
               </div>
             </div>
+
             {meeting.notes && (
               <div className="mt-4 p-3 bg-white/5 rounded-lg text-sm text-white/80 whitespace-pre-wrap">
                 {meeting.notes}
