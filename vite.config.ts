@@ -16,4 +16,9 @@ export default defineConfig({
     // Deploy to Vercel serverless functions instead of default Cloudflare Workers
     preset: "vercel",
   },
+  vite: {
+    server: {
+      allowedHosts: true,
+    },
+  },
 });
