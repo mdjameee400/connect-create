@@ -9,10 +9,24 @@ type Peer = {
   name: string;
   pc: RTCPeerConnection;
   stream: MediaStream;
+  polite: boolean;
+  makingOffer: boolean;
+  pendingCandidates: RTCIceCandidateInit[];
+  remoteSet: boolean;
 };
 
+// STUN + free public TURN (openrelay) so peers on different networks can connect.
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
+  {
+    urls: [
+      "turn:openrelay.metered.ca:80",
+      "turn:openrelay.metered.ca:443",
+      "turn:openrelay.metered.ca:443?transport=tcp",
+    ],
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
 ];
 
 export function MeetingRoom({
@@ -36,6 +50,8 @@ export function MeetingRoom({
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const peerIdRef = useRef<string>(crypto.randomUUID());
   const localStreamRef = useRef<MediaStream | null>(null);
+  const displayNameRef = useRef(displayName);
+  displayNameRef.current = displayName;
 
   const send = useCallback((event: string, payload: Record<string, unknown>) => {
     channelRef.current?.send({ type: "broadcast", event, payload });
@@ -48,48 +64,87 @@ export function MeetingRoom({
       if (peersRef.current[remoteId]) return peersRef.current[remoteId];
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       const stream = new MediaStream();
-      const peer: Peer = { id: remoteId, name: remoteName, pc, stream };
+      // "Polite" peer yields on offer collisions. Use deterministic tie-break by id.
+      const polite = peerIdRef.current > remoteId;
+      const peer: Peer = {
+        id: remoteId,
+        name: remoteName,
+        pc,
+        stream,
+        polite,
+        makingOffer: false,
+        pendingCandidates: [],
+        remoteSet: false,
+      };
       peersRef.current[remoteId] = peer;
       updatePeers();
 
       localStreamRef.current?.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
 
       pc.ontrack = (e) => {
-        e.streams[0].getTracks().forEach((t) => {
-          if (!stream.getTracks().find((x) => x.id === t.id)) stream.addTrack(t);
-        });
+        stream.addTrack(e.track);
         updatePeers();
       };
 
       pc.onicecandidate = (e) => {
-        if (e.candidate) send("ice", { from: peerIdRef.current, to: remoteId, candidate: e.candidate.toJSON() });
+        if (e.candidate) {
+          send("ice", {
+            from: peerIdRef.current,
+            to: remoteId,
+            candidate: e.candidate.toJSON(),
+          });
+        }
       };
 
       pc.onconnectionstatechange = () => {
-        if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
-          // let leave handler clean up
+        console.log(`[peer ${remoteId.slice(0, 6)}] connection:`, pc.connectionState);
+        if (pc.connectionState === "failed") {
+          try { pc.restartIce(); } catch { /* ignore */ }
         }
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        console.log(`[peer ${remoteId.slice(0, 6)}] ice:`, pc.iceConnectionState);
       };
 
       if (initiator) {
         (async () => {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          send("offer", { from: peerIdRef.current, fromName: displayName, to: remoteId, sdp: pc.localDescription });
+          try {
+            peer.makingOffer = true;
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            send("offer", {
+              from: peerIdRef.current,
+              fromName: displayNameRef.current,
+              to: remoteId,
+              sdp: pc.localDescription,
+            });
+          } catch (err) {
+            console.error("createOffer failed", err);
+          } finally {
+            peer.makingOffer = false;
+          }
         })();
       }
 
       return peer;
     },
-    [displayName, send],
+    [send],
   );
 
-  const removePeer = (id: string) => {
+  const removePeer = useCallback((id: string) => {
     const p = peersRef.current[id];
     if (!p) return;
-    p.pc.close();
+    try { p.pc.close(); } catch { /* ignore */ }
     delete peersRef.current[id];
     updatePeers();
+  }, []);
+
+  const flushPendingIce = async (peer: Peer) => {
+    while (peer.pendingCandidates.length) {
+      const c = peer.pendingCandidates.shift()!;
+      try { await peer.pc.addIceCandidate(c); } catch (e) { console.warn("ICE add failed (flush)", e); }
+    }
   };
 
   useEffect(() => {
@@ -111,43 +166,67 @@ export function MeetingRoom({
         channel.on("broadcast", { event: "join" }, ({ payload }) => {
           const { from, fromName } = payload as { from: string; fromName: string };
           if (from === peerIdRef.current) return;
-          // Existing peer (already joined) initiates offer to newcomer
+          // Existing peer initiates offer to newcomer
           createPeer(from, fromName, true);
-          // Announce ourselves back so newcomer knows our name
-          send("hello", { from: peerIdRef.current, fromName: displayName, to: from });
+          // Also greet the newcomer so they know our name
+          send("hello", { from: peerIdRef.current, fromName: displayNameRef.current, to: from });
         });
 
         channel.on("broadcast", { event: "hello" }, ({ payload }) => {
           const { from, fromName, to } = payload as { from: string; fromName: string; to: string };
           if (to !== peerIdRef.current) return;
-          // Register the peer without initiating; they will send us the offer
           if (!peersRef.current[from]) createPeer(from, fromName, false);
         });
 
         channel.on("broadcast", { event: "offer" }, async ({ payload }) => {
-          const { from, fromName, to, sdp } = payload as { from: string; fromName: string; to: string; sdp: RTCSessionDescriptionInit };
+          const { from, fromName, to, sdp } = payload as {
+            from: string; fromName: string; to: string; sdp: RTCSessionDescriptionInit;
+          };
           if (to !== peerIdRef.current) return;
           const peer = peersRef.current[from] ?? createPeer(from, fromName, false);
-          await peer.pc.setRemoteDescription(sdp);
-          const answer = await peer.pc.createAnswer();
-          await peer.pc.setLocalDescription(answer);
-          send("answer", { from: peerIdRef.current, to: from, sdp: peer.pc.localDescription });
+          try {
+            const offerCollision = peer.makingOffer || peer.pc.signalingState !== "stable";
+            if (offerCollision && !peer.polite) {
+              // Impolite peer ignores incoming offer during collision
+              return;
+            }
+            await peer.pc.setRemoteDescription(sdp);
+            peer.remoteSet = true;
+            await flushPendingIce(peer);
+            const answer = await peer.pc.createAnswer();
+            await peer.pc.setLocalDescription(answer);
+            send("answer", { from: peerIdRef.current, to: from, sdp: peer.pc.localDescription });
+          } catch (err) {
+            console.error("offer handling failed", err);
+          }
         });
 
         channel.on("broadcast", { event: "answer" }, async ({ payload }) => {
           const { from, to, sdp } = payload as { from: string; to: string; sdp: RTCSessionDescriptionInit };
           if (to !== peerIdRef.current) return;
           const peer = peersRef.current[from];
-          if (peer) await peer.pc.setRemoteDescription(sdp);
+          if (!peer) return;
+          try {
+            await peer.pc.setRemoteDescription(sdp);
+            peer.remoteSet = true;
+            await flushPendingIce(peer);
+          } catch (err) {
+            console.error("answer handling failed", err);
+          }
         });
 
         channel.on("broadcast", { event: "ice" }, async ({ payload }) => {
-          const { from, to, candidate } = payload as { from: string; to: string; candidate: RTCIceCandidateInit };
+          const { from, to, candidate } = payload as {
+            from: string; to: string; candidate: RTCIceCandidateInit;
+          };
           if (to !== peerIdRef.current) return;
           const peer = peersRef.current[from];
-          if (peer && candidate) {
-            try { await peer.pc.addIceCandidate(candidate); } catch (e) { console.warn("ICE add failed", e); }
+          if (!peer || !candidate) return;
+          if (!peer.remoteSet) {
+            peer.pendingCandidates.push(candidate);
+            return;
           }
+          try { await peer.pc.addIceCandidate(candidate); } catch (e) { console.warn("ICE add failed", e); }
         });
 
         channel.on("broadcast", { event: "leave" }, ({ payload }) => {
@@ -155,10 +234,13 @@ export function MeetingRoom({
           removePeer(from);
         });
 
-        await channel.subscribe(async (state) => {
+        await channel.subscribe((state) => {
           if (state === "SUBSCRIBED") {
-            send("join", { from: peerIdRef.current, fromName: displayName });
+            send("join", { from: peerIdRef.current, fromName: displayNameRef.current });
             setStatus("ready");
+          } else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT") {
+            setErrMsg("Lost connection to the signaling server. Please refresh.");
+            setStatus("error");
           }
         });
       } catch (err) {
@@ -280,7 +362,11 @@ function VideoTile({
 }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    if (ref.current && stream) ref.current.srcObject = stream;
+    if (ref.current && stream) {
+      ref.current.srcObject = stream;
+      // Autoplay can be blocked; force a play attempt.
+      ref.current.play().catch(() => { /* user gesture already happened on join */ });
+    }
   }, [stream]);
   return (
     <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden border border-white/10">
