@@ -2,8 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
 import {
-  Video,
   Play,
   Share2,
   Users,
@@ -59,9 +59,7 @@ function LandingPage() {
       <header className="sticky top-0 z-40 backdrop-blur-md bg-background/70 border-b border-border/60">
         <div className="max-w-7xl mx-auto flex items-center px-6 h-16">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-brand grid place-items-center shadow-sm">
-              <Video className="w-4 h-4 text-brand-foreground" />
-            </div>
+            <Logo size={32} />
             <span className="font-semibold tracking-tight">Orbital Connect</span>
           </Link>
           <nav className="ml-8 hidden md:flex items-center gap-6 text-sm text-muted-foreground">

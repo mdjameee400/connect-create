@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, PlaySquare, Calendar, Settings, Phone, HelpCircle, LogOut, Search, Bell, Video, Loader2 } from "lucide-react";
+import { LayoutGrid, PlaySquare, Calendar, Settings, Phone, HelpCircle, LogOut, Search, Bell, Loader2 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { pingPresence, makeSlug, useCurrentTeam } from "@/lib/team";
+import { Logo } from "@/components/logo";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -91,9 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside className="hidden md:flex w-64 shrink-0 flex-col border-r bg-card">
         <div className="px-5 py-5 flex items-center gap-2.5 border-b">
-          <div className="w-9 h-9 rounded-lg bg-brand text-brand-foreground grid place-items-center">
-            <Video className="w-4.5 h-4.5" strokeWidth={2.5} />
-          </div>
+          <Logo size={36} />
           <div className="leading-tight">
             <div className="font-semibold text-[15px]">Orbital Connect</div>
             <div className="text-[11px] text-muted-foreground">Productivity Hub</div>
