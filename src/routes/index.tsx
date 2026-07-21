@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import {
+  Video,
   Play,
   Share2,
   Users,
