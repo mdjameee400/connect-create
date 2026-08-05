@@ -34,6 +34,7 @@ function AuthPage() {
   const navigate = useNavigate();
   const { redirect } = Route.useSearch();
   const dest = redirect ?? "/dashboard";
+  const goDest = () => { void navigate({ to: dest, replace: true } as never); };
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,15 +45,16 @@ function AuthPage() {
   // Redirect if already logged in, or after OAuth callback lands back on /auth
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: dest, replace: true });
+      if (data.session) goDest();
     });
 
     // Fires when OAuth provider redirects back with tokens in the URL hash
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) navigate({ to: dest, replace: true });
+      if (session) goDest();
     });
     return () => sub.subscription.unsubscribe();
-  }, [navigate, dest]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dest]);
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +76,7 @@ function AuthPage() {
         // When email confirmation is disabled Supabase returns a session immediately.
         if (data.session) {
           toast.success("Account created — welcome to Orbital Connect!");
-          navigate({ to: dest, replace: true });
+          goDest();
         } else {
           // Email confirmation is enabled — show a friendly holding screen.
           setConfirmationSent(true);
@@ -83,7 +85,7 @@ function AuthPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: dest, replace: true });
+        goDest();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
