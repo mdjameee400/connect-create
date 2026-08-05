@@ -152,6 +152,15 @@ export function MeetingRoom({
 
     (async () => {
       try {
+        // Re-verify workspace access server-side (RLS) before touching the signalling bus,
+        // so a guessed room slug can't reach other participants.
+        const { data: allowed } = await supabase
+          .from("meetings")
+          .select("id")
+          .eq("room_slug", slug)
+          .maybeSingle();
+        if (!allowed) throw new Error("You don't have access to this meeting.");
+
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         localStreamRef.current = stream;
@@ -286,13 +295,13 @@ export function MeetingRoom({
 
   if (status === "error") {
     return (
-      <div className="w-full max-w-lg mx-auto text-center p-8 bg-slate-900 border border-white/10 rounded-xl">
-        <div className="w-12 h-12 mx-auto rounded-full bg-red-500/20 grid place-items-center mb-3">
-          <VideoOff className="w-5 h-5 text-red-400" />
+      <div className="w-full max-w-lg mx-auto text-center p-8 bg-card border rounded-xl">
+        <div className="w-12 h-12 mx-auto rounded-full bg-secondary grid place-items-center mb-3">
+          <VideoOff className="w-5 h-5 text-live" />
         </div>
         <h2 className="text-lg font-semibold">Can't start your call</h2>
-        <p className="text-white/60 text-sm mt-2">{errMsg}</p>
-        <p className="text-white/50 text-xs mt-2">Allow camera and microphone access, then try again.</p>
+        <p className="text-muted-foreground text-sm mt-2">{errMsg}</p>
+        <p className="text-muted-foreground text-xs mt-2">Allow camera and microphone access, then try again.</p>
         <Button className="mt-4" variant="secondary" onClick={onLeave}>Back</Button>
       </div>
     );
@@ -301,7 +310,7 @@ export function MeetingRoom({
   return (
     <div className="w-full max-w-6xl mx-auto flex flex-col gap-4">
       {status === "connecting" && (
-        <div className="text-center text-white/60 text-sm flex items-center justify-center gap-2">
+        <div className="text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Joining room…
         </div>
       )}
@@ -336,7 +345,7 @@ export function MeetingRoom({
           <PhoneOff className="w-4 h-4" /> Leave
         </Button>
       </div>
-      <div className="text-center text-xs text-white/40">
+      <div className="text-center text-xs text-muted-foreground">
         {tiles.length} {tiles.length === 1 ? "person" : "people"} in the room
       </div>
     </div>
@@ -369,7 +378,7 @@ function VideoTile({
     }
   }, [stream]);
   return (
-    <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden border border-white/10">
+    <div className="relative aspect-video bg-ink rounded-xl overflow-hidden border">
       <video
         ref={ref}
         autoPlay
@@ -379,15 +388,15 @@ function VideoTile({
       />
       {!camOn && (
         <div className="absolute inset-0 grid place-items-center">
-          <div className="w-16 h-16 rounded-full bg-brand/20 grid place-items-center text-brand font-semibold text-xl">
+          <div className="w-16 h-16 rounded-full bg-ink-foreground/15 grid place-items-center text-ink-foreground font-semibold text-xl">
             {name.charAt(0).toUpperCase()}
           </div>
         </div>
       )}
       <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-xs">
-        <span className="px-2 py-1 rounded-md bg-black/60 text-white truncate max-w-[80%]">{name}</span>
+        <span className="px-2 py-1 rounded-md bg-ink/70 text-ink-foreground truncate max-w-[80%]">{name}</span>
         {(!micOn && isSelf) && (
-          <span className="px-1.5 py-1 rounded-md bg-red-500/80 text-white">
+          <span className="px-1.5 py-1 rounded-md bg-live text-live-foreground">
             <MicOff className="w-3 h-3" />
           </span>
         )}
