@@ -1,5 +1,5 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
-import { LayoutGrid, PlaySquare, Calendar, Settings, Phone, HelpCircle, LogOut, Search, Bell, Loader2 } from "lucide-react";
+import { LayoutGrid, PlaySquare, Calendar, Settings, Phone, HelpCircle, LogOut, Search, Bell, Loader2, Menu } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,15 @@ import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { pingPresence, makeSlug, useCurrentTeam } from "@/lib/team";
 import { Logo } from "@/components/logo";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuGroup,
+} from "@/components/ui/dropdown-menu";
 
 const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -61,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           starts_at: new Date().toISOString(),
           duration_minutes: 30,
           room_slug: slug,
-        }).select("room_slug").single();
+         }).select("room_slug").single();
         if (!error && data) return data;
         if (error && !error.message.includes("room_slug")) throw error;
       }
@@ -89,7 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen flex bg-secondary/40">
-      {/* Sidebar */}
+      {/* Sidebar (Desktop) */}
       <aside className="hidden md:flex w-64 shrink-0 flex-col border-r bg-card">
         <div className="px-5 py-5 flex items-center gap-2.5 border-b">
           <Logo size={36} />
@@ -146,6 +155,52 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top bar */}
         <header className="h-16 border-b bg-card flex items-center gap-4 px-6">
+          {/* Mobile Menu Trigger */}
+          <div className="md:hidden">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-9 w-9">
+                  <Menu className="w-5 h-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56 mt-2">
+                <DropdownMenuLabel className="flex items-center gap-2">
+                  <Logo size={20} />
+                  <span>Orbital Connect</span>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  {nav.map(({ to, label, icon: Icon }) => (
+                    <DropdownMenuItem key={to} asChild>
+                      <Link to={to} className="w-full flex items-center gap-2 cursor-pointer">
+                        <Icon className="w-4 h-4" />
+                        <span>{label}</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={quickCall.isPending || !team}
+                  onClick={() => quickCall.mutate()}
+                  className="cursor-pointer flex items-center gap-2"
+                >
+                  {quickCall.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Phone className="w-4 h-4" />}
+                  <span>Quick Call</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => toast.info("Help center — coming soon")} className="cursor-pointer flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4" />
+                  <span>Help</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive cursor-pointer flex items-center gap-2">
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
           <div className="flex-1 max-w-2xl relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Search recordings, meetings, teammates…" className="pl-9 bg-secondary/60 border-transparent" />
@@ -156,10 +211,42 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button className="w-9 h-9 rounded-full hover:bg-secondary grid place-items-center text-muted-foreground">
             <HelpCircle className="w-4 h-4" />
           </button>
-          <Avatar className="w-9 h-9">
-            {profile.avatar && <AvatarImage src={profile.avatar} />}
-            <AvatarFallback className="bg-brand text-brand-foreground text-sm">{initial}</AvatarFallback>
-          </Avatar>
+
+          {/* User Profile Dropdown Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="focus:outline-none cursor-pointer rounded-full overflow-hidden hover:opacity-90 transition-opacity">
+                <Avatar className="w-9 h-9">
+                  {profile.avatar && <AvatarImage src={profile.avatar} />}
+                  <AvatarFallback className="bg-brand text-brand-foreground text-sm">{initial}</AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 mt-2">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{profile.name}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{profile.email || "No email"}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                {nav.map(({ to, label, icon: Icon }) => (
+                  <DropdownMenuItem key={to} asChild>
+                    <Link to={to} className="w-full flex items-center gap-2 cursor-pointer">
+                      <Icon className="w-4 h-4" />
+                      <span>{label}</span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut} className="text-destructive focus:text-destructive cursor-pointer flex items-center gap-2">
+                <LogOut className="w-4 h-4" />
+                <span>Sign Out</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </header>
 
         <main className="flex-1 overflow-auto">{children}</main>
@@ -167,3 +254,4 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 }
+
