@@ -103,7 +103,7 @@ export function MeetPanel() {
 
       <Card
         className="p-5 border-0"
-        style={{ background: "linear-gradient(135deg, oklch(0.72 0.16 255), oklch(0.62 0.19 255))" }}
+        style={{ background: "linear-gradient(135deg, oklch(0.28 0 0), oklch(0.145 0 0))" }}
       >
         <div className="flex items-start justify-between gap-4">
           <div className="text-ink-foreground">
