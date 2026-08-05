@@ -56,6 +56,15 @@ function AuthPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dest]);
 
+  // Helper: detect network/connection errors to show actionable guidance
+  const getErrorMessage = (err: unknown): string => {
+    if (err instanceof TypeError && err.message.toLowerCase().includes("fetch")) {
+      return "Cannot reach the server. Your Supabase project may be paused — go to supabase.com/dashboard to unpause it, then try again.";
+    }
+    if (err instanceof Error) return err.message;
+    return "Something went wrong";
+  };
+
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -88,11 +97,12 @@ function AuthPage() {
         goDest();
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Something went wrong");
+      toast.error(getErrorMessage(err), { duration: 8000 });
     } finally {
       setLoading(false);
     }
   };
+
 
   // Native Supabase OAuth — works in local dev and production unlike Lovable proxy
   const handleGoogle = async () => {
@@ -108,10 +118,11 @@ function AuthPage() {
       if (error) throw error;
       // Browser is about to navigate to Google — keep loading state true
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Google sign-in failed");
+      toast.error(getErrorMessage(err), { duration: 8000 });
       setLoading(false);
     }
   };
+
 
   // ── Email confirmation holding screen ─────────────────────────────────────
   if (confirmationSent) {
