@@ -1,111 +1,38 @@
-# Collaboration + Scheduled Meetings
+# Locked meetings + monochrome redesign
 
-Two connected features layered onto the existing Orbital Connect MVP.
+Two things: stop meeting links from working for strangers, and rebuild the whole look in a crafted black-and-white style.
 
-## 1. Teams & teammate invitations
+## 1. Meeting links become team-only
 
-Introduce a lightweight **team** concept (one team per owner to start). The owner invites teammates by email; invitees accept via a magic link and join the team. Every recording created by any team member is visible to the whole team in the Library.
+Today `/m/<slug>` is a public page: anyone with the link types a name and joins, signed in or not. New rule: **you must be signed in AND be a member of the host's team.**
 
-### Data model (new tables)
+What people will see:
+- **Signed out** — a locked meeting screen with the meeting title hidden, a short "This meeting is private" message and a Sign in button that returns them to the meeting after login.
+- **Signed in, not on the team** — "You don't have access to this meeting. Ask the host to invite you to their workspace." with a link to how invites work.
+- **Signed in team member** — the meeting details and Join room, exactly as now.
 
-```text
-teams
-  id uuid pk
-  name text                 -- defaults to "<owner name>'s team"
-  owner_id uuid → auth.users
-  created_at timestamptz
+The guest-name prompt and the saved guest name go away; your workspace display name is used.
 
-team_members
-  team_id uuid → teams
-  user_id uuid → auth.users
-  role text ('owner' | 'member')
-  joined_at timestamptz
-  pk (team_id, user_id)
+Invites stay the way to let someone in: host sends a workspace invite link from the dashboard, they accept, then the meeting link works for them.
 
-team_invites
-  id uuid pk
-  team_id uuid → teams
-  email citext
-  token uuid (unique, url-safe)
-  invited_by uuid → auth.users
-  status text ('pending' | 'accepted' | 'revoked')
-  created_at, accepted_at timestamptz
-```
+## 2. Black-and-white redesign, whole app
 
-`recordings` gains a nullable `team_id uuid` column. New recordings are stamped with the creator's active team. Library query returns recordings where `user_id = auth.uid()` **OR** `team_id IN (my teams)`.
+New palette: near-black ink, pure white surfaces, a grey scale for structure, and one restrained accent used only for live/record states. Green branding is retired.
 
-### RLS
+Landing page rebuilt Zoom/Linear-style:
+- Sticky slim nav with the logo, wordmark, and Sign in / Get started.
+- Full-bleed hero on a soft diagonal-hatch pattern: big tight headline, one-line subhead, primary + ghost CTA, and a crisp product mock below.
+- Logo/trust strip, three-up feature cards with fine hairline borders, an alternating record → share → meet walkthrough, pricing, FAQ, and a bold black closing CTA band.
+- Pattern used as a signature texture: engraved diagonal hatching in soft grey, in section dividers and behind the hero, never loud enough to fight the text.
 
-- `teams`: members SELECT; owner UPDATE/DELETE.
-- `team_members`: members SELECT own team rows; owner INSERT/DELETE (via server fn).
-- `team_invites`: owner full CRUD; anon can SELECT by exact `token` (for the accept page).
-- `recordings`: existing owner policy + new "team members can SELECT" policy using a `SECURITY DEFINER` `is_team_member(team_id, uid)` helper to avoid RLS recursion.
+Then the same system rolls through auth, dashboard, calendar, library, settings, the meeting page and the in-call room: white app surfaces, hairline borders, black primary buttons, generous spacing, subtle hover and focus motion. Simple, modern, daily-use.
 
-Helper migration also seeds a personal team for each existing user via a backfill and adds a trigger on `handle_new_user` so new signups get one automatically.
+## Technical notes
 
-### Server functions
-
-- `inviteTeammate({ email })` — owner-only; creates `team_invites` row, returns share URL `/invite/:token`. (No email sending in this phase — owner copies the link and shares it, same "instant share link" pattern as recordings.)
-- `acceptInvite({ token })` — authenticated; inserts `team_members`, marks invite accepted, redirects to `/dashboard`.
-- `revokeInvite({ id })` / `removeMember({ userId })` — owner-only.
-- `listTeammates()` — returns members + pending invites for the Meet panel.
-
-### UI
-
-- **Meet panel → Active Teammates** becomes real: shows accepted members with avatars + presence dot (online = signed-in in last 5 min, tracked via `profiles.last_seen_at` bumped on app load). "Invite" button opens a dialog: email input → creates invite → auto-copies `/invite/:token` link to clipboard and toasts "Invite link copied".
-- **Settings → Team** section: list members, pending invites, revoke / remove actions.
-- **Library**: unchanged UI, but rows now include teammates' recordings with a small "by <name>" line under the title.
-- **New route `/invite/$token`**: public; if signed out shows a "Sign in to join <team name>" CTA that routes through `/auth?redirect=/invite/<token>`; if signed in, one-click "Join team" button.
-
-## 2. Real scheduled meetings
-
-Replace the placeholder "Scheduled Today" / "Coming soon" stubs with real meeting records.
-
-### Data model
-
-```text
-meetings
-  id uuid pk
-  team_id uuid → teams
-  created_by uuid → auth.users
-  title text
-  starts_at timestamptz
-  duration_minutes int
-  room_slug text unique       -- short random slug for the join URL
-  notes text
-  created_at, updated_at timestamptz
-```
-
-RLS: members of the team can SELECT/INSERT/UPDATE/DELETE their team's meetings.
-
-### Server functions / actions
-
-- `createMeeting({ title, starts_at, duration_minutes, notes })` — inserts row, generates unique 8-char `room_slug`, returns `{ id, join_url: '/m/<slug>' }`.
-- `listMeetings({ range })` — upcoming or by date range.
-- `deleteMeeting({ id })`.
-
-### UI
-
-- **Meet panel**:
-  - "Instant Meeting" → creates a meeting with `starts_at = now()`, copies join URL, navigates to `/m/:slug`.
-  - "Schedule" button → opens a compact dialog (title, date, time, duration, optional notes) → creates meeting → toast + copyable link.
-  - "Scheduled Today" list becomes live: shows today's team meetings with time, title, "Copy link" and "Join".
-- **Calendar page** replaces the placeholder with:
-  - Month grid highlighting days that have meetings.
-  - Right pane listing that day's meetings with join / edit / delete actions.
-  - "New meeting" button in the header.
-- **New public route `/m/$slug`**: shows meeting title, host, start time, and a big **Join** button. The join screen itself remains a stub ("Live call room — video calling coming in the next phase") since real WebRTC/LiveKit was explicitly out of scope; the value delivered now is real meeting records + shareable join URLs + calendar integration, matching how Loom/Calendly links behave before the room opens.
-
-### Design
-
-Everything reuses the existing light dashboard style: green primary, soft cards, rounded inputs, blue accent for "Instant Meeting". Dialogs use existing shadcn `Dialog` component. No new visual language.
-
-## Out of scope (explicitly, this phase)
-
-- Sending invite emails via SMTP (owner shares the copied link — matches the app's core "instant link" pattern).
-- Actual WebRTC video inside the meeting room (`/m/:slug` shows meeting info + placeholder for now).
-- Recurring meetings, calendar sync (Google/Outlook), timezone picker (uses browser timezone).
-- Multiple teams per user / switching teams.
-- Roles beyond owner/member.
-
-Ready to build on approval.
+- New security-definer helper `public.is_team_member(_user_id, _team_id)` plus a replacement SELECT policy on `meetings` restricting reads to team members (drops the current anon-readable path). Requires a migration.
+- `src/routes/m.$slug.tsx`: fetch the session first; render locked / no-access / allowed states. Drop `localStorage` guest name; pass the profile display name to `MeetingRoom`.
+- Signalling channel `room:<slug>` gets an authorization check — presence/broadcast only after the membership query succeeds, so a stranger cannot bypass the UI and speak on the channel directly.
+- `/auth` accepts a sanitized same-origin `redirect` search param and navigates there after sign-in.
+- `src/styles.css`: replace `--brand*`, primary, sidebar and accent tokens with the monochrome scale; add a `@utility hatch` for the diagonal pattern so sections reuse one definition. Components keep using semantic tokens — no hardcoded colors.
+- Logo recolored to monochrome ink (`src/components/logo.tsx`, `public/favicon.svg`).
+- Route `head()` metadata refreshed per page during the pass.
