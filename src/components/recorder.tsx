@@ -224,10 +224,10 @@ export function Recorder() {
       </div>
 
       {/* Preview */}
-      <Card className="p-0 overflow-hidden bg-slate-900 aspect-video relative">
+      <Card className="p-0 overflow-hidden bg-ink aspect-video relative">
         <video ref={videoRef} className="w-full h-full object-contain" playsInline />
         {state === "idle" && (
-          <div className="absolute inset-0 grid place-items-center text-slate-400 text-sm">
+          <div className="absolute inset-0 grid place-items-center text-ink-foreground/60 text-sm">
             <div className="text-center">
               <Video className="w-10 h-10 mx-auto mb-2 opacity-60" />
               Preview appears here once you start recording
@@ -235,12 +235,12 @@ export function Recorder() {
           </div>
         )}
         {state === "countdown" && (
-          <div className="absolute inset-0 grid place-items-center bg-black/40">
-            <div className="text-white text-[120px] font-bold leading-none">{count}</div>
+          <div className="absolute inset-0 grid place-items-center bg-ink/50">
+            <div className="text-ink-foreground text-[120px] font-bold leading-none">{count}</div>
           </div>
         )}
         {state === "recording" && (
-          <div className="absolute top-3 left-3 flex items-center gap-2 bg-black/60 backdrop-blur px-3 py-1.5 rounded-full text-white text-sm">
+          <div className="absolute top-3 left-3 flex items-center gap-2 bg-ink/70 backdrop-blur px-3 py-1.5 rounded-full text-ink-foreground text-sm">
             <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             REC · {fmt(elapsed)}
           </div>

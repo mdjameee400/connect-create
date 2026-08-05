@@ -103,17 +103,17 @@ export function MeetPanel() {
 
       <Card
         className="p-5 border-0"
-        style={{ background: "linear-gradient(135deg, oklch(0.72 0.16 255), oklch(0.62 0.19 255))" }}
+        style={{ background: "linear-gradient(135deg, oklch(0.28 0 0), oklch(0.145 0 0))" }}
       >
         <div className="flex items-start justify-between gap-4">
-          <div className="text-white">
+          <div className="text-ink-foreground">
             <div className="font-semibold text-[15px]">Instant Meeting</div>
-            <div className="text-white/85 text-sm">Start a room and invite your team instantly.</div>
+            <div className="text-ink-foreground/80 text-sm">Start a room and invite your team instantly.</div>
           </div>
           <Button
             size="sm"
             variant="secondary"
-            className="bg-white text-slate-900 hover:bg-white/90 gap-1.5"
+            className="bg-background text-foreground hover:bg-background/90 gap-1.5"
             onClick={() => instantMeet.mutate()}
             disabled={instantMeet.isPending || !team}
           >

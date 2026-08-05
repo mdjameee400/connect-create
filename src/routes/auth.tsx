@@ -9,8 +9,18 @@ import { Mail } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/logo";
 
+function sanitizeRedirect(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  // same-origin paths only
+  if (!value.startsWith("/") || value.startsWith("//")) return undefined;
+  return value;
+}
+
 export const Route = createFileRoute("/auth")({
   ssr: false,
+  validateSearch: (search: Record<string, unknown>) => ({
+    redirect: sanitizeRedirect(search['redirect']),
+  }),
   head: () => ({
     meta: [
       { title: "Sign in — Orbital Connect" },
@@ -22,6 +32,9 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { redirect } = Route.useSearch();
+  const dest = redirect ?? "/dashboard";
+  const goDest = () => { void navigate({ to: dest, replace: true } as never); };
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,15 +45,16 @@ function AuthPage() {
   // Redirect if already logged in, or after OAuth callback lands back on /auth
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/dashboard", replace: true });
+      if (data.session) goDest();
     });
 
     // Fires when OAuth provider redirects back with tokens in the URL hash
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) navigate({ to: "/dashboard", replace: true });
+      if (session) goDest();
     });
     return () => sub.subscription.unsubscribe();
-  }, [navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dest]);
 
   const handleEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +67,7 @@ function AuthPage() {
           options: {
             // After email confirmation the user lands back here and the
             // onAuthStateChange listener above will redirect them automatically.
-            emailRedirectTo: `${window.location.origin}/auth`,
+            emailRedirectTo: `${window.location.origin}/auth${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""}`,
             data: { full_name: name },
           },
         });
@@ -62,7 +76,7 @@ function AuthPage() {
         // When email confirmation is disabled Supabase returns a session immediately.
         if (data.session) {
           toast.success("Account created — welcome to Orbital Connect!");
-          navigate({ to: "/dashboard", replace: true });
+          goDest();
         } else {
           // Email confirmation is enabled — show a friendly holding screen.
           setConfirmationSent(true);
@@ -71,7 +85,7 @@ function AuthPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: "/dashboard", replace: true });
+        goDest();
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Something went wrong");
@@ -88,7 +102,7 @@ function AuthPage() {
         provider: "google",
         options: {
           // Redirect back to /auth after Google consent; onAuthStateChange handles navigation
-          redirectTo: `${window.location.origin}/auth`,
+          redirectTo: `${window.location.origin}/auth${redirect ? `?redirect=${encodeURIComponent(redirect)}` : ""}`,
         },
       });
       if (error) throw error;

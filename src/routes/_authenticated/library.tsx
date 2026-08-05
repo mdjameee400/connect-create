@@ -67,20 +67,20 @@ function Library() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {data.rows.map((r) => (
             <Card key={r.id} className="overflow-hidden group p-0">
-              <Link to="/v/$id" params={{ id: r.id }} className="block aspect-video bg-slate-900 relative">
-                <div className="absolute inset-0 grid place-items-center text-slate-500">
+              <Link to="/v/$id" params={{ id: r.id }} className="block aspect-video bg-ink relative">
+                <div className="absolute inset-0 grid place-items-center text-ink-foreground/50">
                   <PlaySquare className="w-10 h-10" />
                 </div>
-                <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded">
+                <div className="absolute bottom-2 right-2 bg-ink/70 text-ink-foreground text-xs px-2 py-0.5 rounded">
                   {fmtDur(r.duration_seconds)}
                 </div>
                 {r.upload_status === "uploading" && (
-                  <div className="absolute top-2 left-2 bg-amber-500/90 text-white text-xs px-2 py-0.5 rounded flex items-center gap-1">
+                  <div className="absolute top-2 left-2 bg-secondary text-secondary-foreground text-xs px-2 py-0.5 rounded flex items-center gap-1">
                     <Loader2 className="w-3 h-3 animate-spin" /> Uploading
                   </div>
                 )}
                 {r.upload_status === "failed" && (
-                  <div className="absolute top-2 left-2 bg-destructive text-white text-xs px-2 py-0.5 rounded">Failed</div>
+                  <div className="absolute top-2 left-2 bg-destructive text-destructive-foreground text-xs px-2 py-0.5 rounded">Failed</div>
                 )}
               </Link>
               <div className="p-4">
