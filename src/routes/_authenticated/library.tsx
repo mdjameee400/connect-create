@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Copy, Trash2, ExternalLink, PlaySquare, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { finalizeInterrupted } from "@/lib/chunked-recording";
 
 export const Route = createFileRoute("/_authenticated/library")({
   component: Library,
