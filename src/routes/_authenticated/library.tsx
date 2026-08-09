@@ -40,6 +40,7 @@ function Library() {
       toast.success("Recording deleted");
       qc.invalidateQueries({ queryKey: ["recordings"] });
     },
+  });
 
   const recover = useMutation({
     mutationFn: async (r: {
