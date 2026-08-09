@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { MeetingChat } from "@/components/meeting-chat";
 import { MeetingWhiteboard } from "@/components/meeting-whiteboard";
 import { CallRecorder } from "@/lib/call-recorder";
-import { getOrCreateMyTeam } from "@/lib/team";
+import { fetchCurrentTeam } from "@/lib/team";
 
 
 type Peer = {
