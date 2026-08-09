@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Loader2 } from "lucide-react";
+import {
+  Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Loader2,
+  MessageSquare, PenLine, Circle, Square, X,
+} from "lucide-react";
 import { toast } from "sonner";
+import { MeetingChat } from "@/components/meeting-chat";
+import { MeetingWhiteboard } from "@/components/meeting-whiteboard";
+import { CallRecorder } from "@/lib/call-recorder";
+import { getOrCreateMyTeam } from "@/lib/team";
+
 
 type Peer = {
   id: string;
