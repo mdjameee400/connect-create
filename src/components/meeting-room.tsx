@@ -39,10 +39,14 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 export function MeetingRoom({
   slug,
+  meetingId,
+  meetingTitle,
   displayName,
   onLeave,
 }: {
   slug: string;
+  meetingId: string;
+  meetingTitle: string;
   displayName: string;
   onLeave: () => void;
 }) {
@@ -52,6 +56,11 @@ export function MeetingRoom({
   const [camOn, setCamOn] = useState(true);
   const [status, setStatus] = useState<"connecting" | "ready" | "error">("connecting");
   const [errMsg, setErrMsg] = useState<string>("");
+  const [panel, setPanel] = useState<"none" | "chat" | "board">("none");
+  const [unread, setUnread] = useState(0);
+  const [recState, setRecState] = useState<"idle" | "recording" | "saving">("idle");
+  const recorderInstance = useRef<CallRecorder | null>(null);
+
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const peersRef = useRef<Record<string, Peer>>({});
