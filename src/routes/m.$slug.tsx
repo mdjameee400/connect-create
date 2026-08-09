@@ -191,7 +191,13 @@ function MeetingPage() {
 
       <main className="flex-1 grid place-items-center px-4 py-8">
         {inRoom ? (
-          <MeetingRoom slug={slug} displayName={displayName} onLeave={() => setInRoom(false)} />
+          <MeetingRoom
+            slug={slug}
+            meetingId={meeting.id}
+            meetingTitle={meeting.title}
+            displayName={displayName}
+            onLeave={() => setInRoom(false)}
+          />
         ) : (
           <Card className="w-full max-w-lg p-8">
             <div className="flex items-center gap-2 text-[11px] font-semibold tracking-widest uppercase mb-3">
