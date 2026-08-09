@@ -18,9 +18,10 @@ function sanitizeRedirect(value: unknown): string | undefined {
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>) => ({
-    redirect: sanitizeRedirect(search['redirect']),
-  }),
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
+    const redirect = sanitizeRedirect(search['redirect']);
+    return redirect ? { redirect } : {};
+  },
   head: () => ({
     meta: [
       { title: "Sign in — Orbital Connect" },
