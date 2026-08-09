@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, Trash2, ExternalLink, PlaySquare, Loader2 } from "lucide-react";
+import { Copy, Trash2, ExternalLink, PlaySquare, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { finalizeInterrupted } from "@/lib/chunked-recording";
