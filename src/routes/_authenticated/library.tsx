@@ -109,6 +109,24 @@ function Library() {
                   {r.user_id !== data.myId && <> · by {data.names[r.user_id] ?? "Teammate"}</>}
                 </div>
                 <div className="mt-3 flex gap-1">
+                  {r.user_id === data.myId && r.parts_count > 0 && r.upload_status !== "ready" ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="gap-1.5"
+                      disabled={recover.isPending}
+                      onClick={() => recover.mutate({
+                        id: r.id,
+                        user_id: r.user_id,
+                        parts_count: r.parts_count,
+                        mime_type: r.mime_type,
+                        storage_path: r.storage_path,
+                      })}
+                    >
+                      {recover.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Finalize
+                    </Button>
+                  ) : null}
                   <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => copy(r.id)}>
                     <Copy className="w-3.5 h-3.5" /> Copy link
                   </Button>
