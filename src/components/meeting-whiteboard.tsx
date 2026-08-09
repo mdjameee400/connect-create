@@ -124,7 +124,7 @@ export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
       await supabase.from("meeting_board_strokes").insert({
         meeting_id: meetingId,
         author_id: meRef.current,
-        stroke: stroke as unknown as Record<string, unknown>,
+        stroke: JSON.parse(JSON.stringify(stroke)),
       });
     }
   };
