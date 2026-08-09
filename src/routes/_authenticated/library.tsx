@@ -92,9 +92,15 @@ function Library() {
                     <Loader2 className="w-3 h-3 animate-spin" /> Uploading
                   </div>
                 )}
+                {r.upload_status === "recording" && (
+                  <div className="absolute top-2 left-2 bg-secondary text-secondary-foreground text-xs px-2 py-0.5 rounded flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" /> Capturing
+                  </div>
+                )}
                 {r.upload_status === "failed" && (
                   <div className="absolute top-2 left-2 bg-destructive text-destructive-foreground text-xs px-2 py-0.5 rounded">Failed</div>
                 )}
+
               </Link>
               <div className="p-4">
                 <div className="font-medium text-sm truncate">{r.title}</div>
