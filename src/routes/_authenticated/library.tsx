@@ -40,7 +40,18 @@ function Library() {
       toast.success("Recording deleted");
       qc.invalidateQueries({ queryKey: ["recordings"] });
     },
+
+  const recover = useMutation({
+    mutationFn: async (r: {
+      id: string; user_id: string; parts_count: number; mime_type: string; storage_path: string;
+    }) => finalizeInterrupted(r),
+    onSuccess: () => {
+      toast.success("Recording recovered");
+      qc.invalidateQueries({ queryKey: ["recordings"] });
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Couldn't recover recording"),
   });
+
 
   const copy = (id: string) => {
     const url = `${window.location.origin}/v/${id}`;
