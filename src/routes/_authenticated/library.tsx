@@ -3,9 +3,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Copy, Trash2, ExternalLink, PlaySquare, Loader2 } from "lucide-react";
+import { Copy, Trash2, ExternalLink, PlaySquare, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { finalizeInterrupted } from "@/lib/chunked-recording";
 
 export const Route = createFileRoute("/_authenticated/library")({
   component: Library,
@@ -41,6 +42,18 @@ function Library() {
       qc.invalidateQueries({ queryKey: ["recordings"] });
     },
   });
+
+  const recover = useMutation({
+    mutationFn: async (r: {
+      id: string; user_id: string; parts_count: number; mime_type: string; storage_path: string;
+    }) => finalizeInterrupted(r),
+    onSuccess: () => {
+      toast.success("Recording recovered");
+      qc.invalidateQueries({ queryKey: ["recordings"] });
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Couldn't recover recording"),
+  });
+
 
   const copy = (id: string) => {
     const url = `${window.location.origin}/v/${id}`;
@@ -79,9 +92,15 @@ function Library() {
                     <Loader2 className="w-3 h-3 animate-spin" /> Uploading
                   </div>
                 )}
+                {r.upload_status === "recording" && (
+                  <div className="absolute top-2 left-2 bg-secondary text-secondary-foreground text-xs px-2 py-0.5 rounded flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" /> Capturing
+                  </div>
+                )}
                 {r.upload_status === "failed" && (
                   <div className="absolute top-2 left-2 bg-destructive text-destructive-foreground text-xs px-2 py-0.5 rounded">Failed</div>
                 )}
+
               </Link>
               <div className="p-4">
                 <div className="font-medium text-sm truncate">{r.title}</div>
@@ -90,6 +109,24 @@ function Library() {
                   {r.user_id !== data.myId && <> · by {data.names[r.user_id] ?? "Teammate"}</>}
                 </div>
                 <div className="mt-3 flex gap-1">
+                  {r.user_id === data.myId && r.parts_count > 0 && r.upload_status !== "ready" ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="gap-1.5"
+                      disabled={recover.isPending}
+                      onClick={() => recover.mutate({
+                        id: r.id,
+                        user_id: r.user_id,
+                        parts_count: r.parts_count,
+                        mime_type: r.mime_type,
+                        storage_path: r.storage_path,
+                      })}
+                    >
+                      {recover.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                      Finalize
+                    </Button>
+                  ) : null}
                   <Button size="sm" variant="ghost" className="gap-1.5" onClick={() => copy(r.id)}>
                     <Copy className="w-3.5 h-3.5" /> Copy link
                   </Button>

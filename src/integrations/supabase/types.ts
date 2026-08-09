@@ -14,6 +14,73 @@ export type Database = {
   }
   public: {
     Tables: {
+      meeting_board_strokes: {
+        Row: {
+          author_id: string
+          created_at: string
+          id: string
+          meeting_id: string
+          stroke: Json
+        }
+        Insert: {
+          author_id: string
+          created_at?: string
+          id?: string
+          meeting_id: string
+          stroke: Json
+        }
+        Update: {
+          author_id?: string
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          stroke?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_board_strokes_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          meeting_id: string
+          sender_id: string
+          sender_name: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          meeting_id: string
+          sender_id: string
+          sender_name?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          sender_id?: string
+          sender_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_messages_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meetings: {
         Row: {
           created_at: string
@@ -91,7 +158,9 @@ export type Database = {
           duration_seconds: number
           id: string
           is_public: boolean
+          meeting_id: string | null
           mime_type: string
+          parts_count: number
           size_bytes: number
           storage_path: string
           team_id: string | null
@@ -106,7 +175,9 @@ export type Database = {
           duration_seconds?: number
           id?: string
           is_public?: boolean
+          meeting_id?: string | null
           mime_type?: string
+          parts_count?: number
           size_bytes?: number
           storage_path: string
           team_id?: string | null
@@ -121,7 +192,9 @@ export type Database = {
           duration_seconds?: number
           id?: string
           is_public?: boolean
+          meeting_id?: string | null
           mime_type?: string
+          parts_count?: number
           size_bytes?: number
           storage_path?: string
           team_id?: string | null
@@ -132,6 +205,13 @@ export type Database = {
           view_count?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "recordings_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "recordings_team_id_fkey"
             columns: ["team_id"]
@@ -240,6 +320,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_access_meeting: {
+        Args: { _meeting_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_team_member: {
         Args: { _team_id: string; _user_id: string }
         Returns: boolean

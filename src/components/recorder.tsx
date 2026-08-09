@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { ChunkedRecording } from "@/lib/chunked-recording";
 
 type Mode = "screen" | "window" | "region";
 
@@ -24,6 +25,7 @@ export function Recorder() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const chunkedRef = useRef<ChunkedRecording | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const startedAtRef = useRef<number>(0);
 
@@ -93,14 +95,53 @@ export function Recorder() {
       const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
         ? "video/webm;codecs=vp9,opus"
         : "video/webm";
+
+      // Create the cloud recording up-front so chunks stream straight to storage.
+      const { data: userData } = await supabase.auth.getUser();
+      const user = userData.user;
+      if (!user) {
+        toast.error("Session expired — sign in again");
+        stopTracks();
+        setState("idle");
+        return;
+      }
+      const { data: teamRow } = await supabase
+        .from("team_members")
+        .select("team_id")
+        .eq("user_id", user.id)
+        .order("joined_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const title = `Recording · ${new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      const chunked = new ChunkedRecording({
+        userId: user.id,
+        teamId: teamRow?.team_id ?? null,
+        title,
+        mime,
+      });
+      try {
+        await chunked.start();
+      } catch (e) {
+        console.error(e);
+        toast.error("Couldn't start cloud recording");
+        stopTracks();
+        setState("idle");
+        return;
+      }
+      chunkedRef.current = chunked;
+      queryClient.invalidateQueries({ queryKey: ["recordings"] });
+
       const rec = new MediaRecorder(combined, { mimeType: mime });
       recorderRef.current = rec;
-      rec.ondataavailable = (e) => e.data.size > 0 && chunksRef.current.push(e.data);
-      rec.onstop = () => finalize(mime);
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunked.push(e.data);
+      };
+      rec.onstop = () => finalize();
       combined.getVideoTracks()[0].addEventListener("ended", () => {
         if (rec.state !== "inactive") rec.stop();
       });
-      rec.start(1000);
+      rec.start(5000);
       startedAtRef.current = Date.now();
       setState("recording");
       setElapsed(0);
@@ -118,54 +159,20 @@ export function Recorder() {
     }
   };
 
-  const finalize = async (mime: string) => {
+  const finalize = async () => {
     setState("processing");
     const durationSec = Math.floor((Date.now() - startedAtRef.current) / 1000);
-    const blob = new Blob(chunksRef.current, { type: mime });
     stopTracks();
 
-    const { data: userData } = await supabase.auth.getUser();
-    const user = userData.user;
-    if (!user) { toast.error("Session expired"); setState("idle"); return; }
+    const chunked = chunkedRef.current;
+    chunkedRef.current = null;
+    if (!chunked) { setState("idle"); return; }
 
-    // Stamp recording with the user's primary team so teammates see it
-    const { data: teamRow } = await supabase
-      .from("team_members")
-      .select("team_id")
-      .eq("user_id", user.id)
-      .order("joined_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const teamId = teamRow?.team_id ?? null;
-
-    const id = crypto.randomUUID();
-    const path = `${user.id}/${id}.webm`;
-
-    // Create DB row first so share link is instantly available
-    const title = `Recording · ${new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
-    const { data: row, error: dbErr } = await supabase.from("recordings").insert({
-      id,
-      user_id: user.id,
-      team_id: teamId,
-      title,
-      storage_path: path,
-      duration_seconds: durationSec,
-      size_bytes: blob.size,
-      mime_type: mime,
-      upload_status: "uploading",
-    }).select().single();
-
-    if (dbErr || !row) {
-      toast.error("Couldn't save recording metadata");
-      console.error(dbErr);
-      setState("idle");
-      return;
-    }
-
+    const id = chunked.id;
     const shareUrl = `${window.location.origin}/v/${id}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("Share link copied — upload in progress", {
+      toast.success("Share link copied — finishing upload", {
         description: shareUrl,
         action: { label: "Open", onClick: () => navigate({ to: "/v/$id", params: { id } }) },
       });
@@ -173,25 +180,13 @@ export function Recorder() {
       toast.success("Recording saved — link ready in Library");
     }
 
+    const res = await chunked.finalize(durationSec);
+    if (!res.ok) toast.error("Upload failed — open Library to retry");
     setState("idle");
     queryClient.invalidateQueries({ queryKey: ["recordings"] });
-
-    // Upload in background
-    (async () => {
-      const { error: upErr } = await supabase.storage.from("recordings").upload(path, blob, {
-        contentType: mime, upsert: false,
-      });
-      if (upErr) {
-        console.error(upErr);
-        await supabase.from("recordings").update({ upload_status: "failed" }).eq("id", id);
-        toast.error("Upload failed — recording kept locally only");
-        return;
-      }
-      await supabase.from("recordings").update({ upload_status: "ready" }).eq("id", id);
-      queryClient.invalidateQueries({ queryKey: ["recordings"] });
-      queryClient.invalidateQueries({ queryKey: ["recording", id] });
-    })();
+    queryClient.invalidateQueries({ queryKey: ["recording", id] });
   };
+
 
   const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 

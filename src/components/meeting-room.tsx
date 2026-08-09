@@ -1,8 +1,16 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Loader2 } from "lucide-react";
+import {
+  Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Loader2,
+  MessageSquare, PenLine, Circle, Square, X,
+} from "lucide-react";
 import { toast } from "sonner";
+import { MeetingChat } from "@/components/meeting-chat";
+import { MeetingWhiteboard } from "@/components/meeting-whiteboard";
+import { CallRecorder } from "@/lib/call-recorder";
+import { fetchCurrentTeam } from "@/lib/team";
+
 
 type Peer = {
   id: string;
@@ -31,10 +39,14 @@ const ICE_SERVERS: RTCIceServer[] = [
 
 export function MeetingRoom({
   slug,
+  meetingId,
+  meetingTitle,
   displayName,
   onLeave,
 }: {
   slug: string;
+  meetingId: string;
+  meetingTitle: string;
   displayName: string;
   onLeave: () => void;
 }) {
@@ -44,6 +56,11 @@ export function MeetingRoom({
   const [camOn, setCamOn] = useState(true);
   const [status, setStatus] = useState<"connecting" | "ready" | "error">("connecting");
   const [errMsg, setErrMsg] = useState<string>("");
+  const [panel, setPanel] = useState<"none" | "chat" | "board">("none");
+  const [unread, setUnread] = useState(0);
+  const [recState, setRecState] = useState<"idle" | "recording" | "saving">("idle");
+  const recorderInstance = useRef<CallRecorder | null>(null);
+
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const peersRef = useRef<Record<string, Peer>>({});
@@ -287,6 +304,53 @@ export function MeetingRoom({
     toast.success("Meeting link copied");
   };
 
+  const toggleRecording = async () => {
+    if (recState === "saving") return;
+    if (recState === "recording") {
+      setRecState("saving");
+      const res = await recorderInstance.current?.stop();
+      recorderInstance.current = null;
+      setRecState("idle");
+      if (res?.ok && res.id) {
+        toast.success("Recording saved to your library", {
+          description: `${window.location.origin}/v/${res.id}`,
+        });
+      } else {
+        toast.error("Recording could not be saved");
+      }
+      return;
+    }
+
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const user = u.user;
+      if (!user || !localStreamRef.current) return;
+      const team = await fetchCurrentTeam();
+      const rec = new CallRecorder({
+        userId: user.id,
+        teamId: team?.id ?? null,
+        meetingId,
+        title: `${meetingTitle} · ${new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`,
+      });
+      await rec.start([
+        { stream: localStreamRef.current, name: `${displayName} (you)` },
+        ...Object.values(peersRef.current).map((p) => ({ stream: p.stream, name: p.name })),
+      ]);
+      recorderInstance.current = rec;
+      setRecState("recording");
+      toast.success("Recording started — uploading live");
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't start recording");
+      setRecState("idle");
+    }
+  };
+
+  useEffect(() => {
+    if (panel === "chat") setUnread(0);
+  }, [panel]);
+
+
   const tiles = [
     { id: "self", name: `${displayName} (you)`, stream: localStream, muted: true, mirror: true },
     ...Object.values(peers).map((p) => ({ id: p.id, name: p.name, stream: p.stream, muted: false, mirror: false })),
@@ -308,35 +372,115 @@ export function MeetingRoom({
   }
 
   return (
-    <div className="w-full max-w-6xl mx-auto flex flex-col gap-4">
+    <div className="w-full max-w-7xl mx-auto flex flex-col gap-4">
       {status === "connecting" && (
         <div className="text-center text-muted-foreground text-sm flex items-center justify-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" /> Joining room…
         </div>
       )}
-      <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-      >
-        {tiles.map((t) => (
-          <VideoTile
-            key={t.id}
-            name={t.name}
-            stream={t.stream}
-            muted={t.muted}
-            mirror={t.mirror}
-            isSelf={t.id === "self"}
-            micOn={t.id === "self" ? micOn : true}
-            camOn={t.id === "self" ? camOn : true}
-          />
-        ))}
+
+      <div className={`grid gap-4 ${panel === "none" ? "" : "lg:grid-cols-[1fr_360px]"}`}>
+        <div className="space-y-4 min-w-0">
+          {panel === "board" ? (
+            <MeetingWhiteboard meetingId={meetingId} />
+          ) : (
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+              {tiles.map((t) => (
+                <VideoTile
+                  key={t.id}
+                  name={t.name}
+                  stream={t.stream}
+                  muted={t.muted}
+                  mirror={t.mirror}
+                  isSelf={t.id === "self"}
+                  micOn={t.id === "self" ? micOn : true}
+                  camOn={t.id === "self" ? camOn : true}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {panel !== "none" && (
+          <aside className="border rounded-xl bg-card overflow-hidden h-[520px] flex flex-col">
+            <div className="flex items-center border-b">
+              <button
+                onClick={() => setPanel("chat")}
+                className={`flex-1 py-2.5 text-sm font-medium ${panel === "chat" ? "bg-secondary" : ""}`}
+              >
+                Chat
+              </button>
+              <button
+                onClick={() => setPanel("board")}
+                className={`flex-1 py-2.5 text-sm font-medium ${panel === "board" ? "bg-secondary" : ""}`}
+              >
+                Whiteboard
+              </button>
+              <Button size="icon" variant="ghost" className="w-9 h-9 mr-1" onClick={() => setPanel("none")} aria-label="Close panel">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="flex-1 min-h-0">
+              {panel === "chat" ? (
+                <MeetingChat
+                  meetingId={meetingId}
+                  displayName={displayName}
+                  onNewMessage={() => setUnread((n) => n + 1)}
+                />
+              ) : (
+                <div className="p-4 text-sm text-muted-foreground">
+                  The whiteboard is open on the left. Draw together in real time.
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
       </div>
-      <div className="flex items-center justify-center gap-2 py-2">
+
+      <div className="flex items-center justify-center gap-2 py-2 flex-wrap">
         <Button size="lg" variant={micOn ? "secondary" : "destructive"} className="rounded-full h-12 w-12 p-0" onClick={toggleMic} aria-label="Toggle mic">
           {micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
         </Button>
         <Button size="lg" variant={camOn ? "secondary" : "destructive"} className="rounded-full h-12 w-12 p-0" onClick={toggleCam} aria-label="Toggle camera">
           {camOn ? <VideoIcon className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "chat" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0 relative"
+          onClick={() => setPanel(panel === "chat" ? "none" : "chat")}
+          aria-label="Toggle chat"
+        >
+          <MessageSquare className="w-5 h-5" />
+          {unread > 0 && panel !== "chat" && (
+            <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] grid place-items-center">
+              {unread}
+            </span>
+          )}
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "board" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "board" ? "none" : "board")}
+          aria-label="Toggle whiteboard"
+        >
+          <PenLine className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={recState === "recording" ? "destructive" : "secondary"}
+          className="rounded-full h-12 gap-1.5 px-4"
+          onClick={() => void toggleRecording()}
+          disabled={recState === "saving" || status !== "ready"}
+        >
+          {recState === "saving" ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+          ) : recState === "recording" ? (
+            <><Square className="w-4 h-4 fill-current" /> Stop recording</>
+          ) : (
+            <><Circle className="w-4 h-4 fill-current" /> Record</>
+          )}
         </Button>
         <Button size="lg" variant="secondary" className="rounded-full h-12 gap-1.5 px-4" onClick={copyLink}>
           <Copy className="w-4 h-4" /> Copy link
@@ -345,6 +489,7 @@ export function MeetingRoom({
           <PhoneOff className="w-4 h-4" /> Leave
         </Button>
       </div>
+
       <div className="text-center text-xs text-muted-foreground">
         {tiles.length} {tiles.length === 1 ? "person" : "people"} in the room
       </div>
