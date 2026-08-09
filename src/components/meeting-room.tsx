@@ -304,6 +304,53 @@ export function MeetingRoom({
     toast.success("Meeting link copied");
   };
 
+  const toggleRecording = async () => {
+    if (recState === "saving") return;
+    if (recState === "recording") {
+      setRecState("saving");
+      const res = await recorderInstance.current?.stop();
+      recorderInstance.current = null;
+      setRecState("idle");
+      if (res?.ok && res.id) {
+        toast.success("Recording saved to your library", {
+          description: `${window.location.origin}/v/${res.id}`,
+        });
+      } else {
+        toast.error("Recording could not be saved");
+      }
+      return;
+    }
+
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      const user = u.user;
+      if (!user || !localStreamRef.current) return;
+      const team = await fetchCurrentTeam();
+      const rec = new CallRecorder({
+        userId: user.id,
+        teamId: team?.id ?? null,
+        meetingId,
+        title: `${meetingTitle} · ${new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`,
+      });
+      await rec.start([
+        { stream: localStreamRef.current, name: `${displayName} (you)` },
+        ...Object.values(peersRef.current).map((p) => ({ stream: p.stream, name: p.name })),
+      ]);
+      recorderInstance.current = rec;
+      setRecState("recording");
+      toast.success("Recording started — uploading live");
+    } catch (err) {
+      console.error(err);
+      toast.error("Couldn't start recording");
+      setRecState("idle");
+    }
+  };
+
+  useEffect(() => {
+    if (panel === "chat") setUnread(0);
+  }, [panel]);
+
+
   const tiles = [
     { id: "self", name: `${displayName} (you)`, stream: localStream, muted: true, mirror: true },
     ...Object.values(peers).map((p) => ({ id: p.id, name: p.name, stream: p.stream, muted: false, mirror: false })),
