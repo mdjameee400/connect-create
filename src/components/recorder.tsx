@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
+import { ChunkedRecording } from "@/lib/chunked-recording";
 
 type Mode = "screen" | "window" | "region";
 
