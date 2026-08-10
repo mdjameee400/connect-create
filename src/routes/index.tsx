@@ -296,6 +296,7 @@ function LandingPage() {
       </section>
 
       {/* ── Pricing ─────────────────────────────────────────── */}
+      <Reveal>
       <section id="pricing" className="border-b">
         <div className="mx-auto max-w-6xl px-5 py-20">
           <div className="max-w-2xl">
