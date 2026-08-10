@@ -377,6 +377,7 @@ function LandingPage() {
           </div>
         </div>
       </section>
+      </Reveal>
 
       {/* ── FAQ ─────────────────────────────────────────────── */}
       <Reveal>
