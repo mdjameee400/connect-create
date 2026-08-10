@@ -245,6 +245,7 @@ function LandingPage() {
           </div>
         </div>
       </section>
+      </Reveal>
 
       {/* ── How it works ────────────────────────────────────── */}
       <Reveal>
