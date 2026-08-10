@@ -415,6 +415,7 @@ function LandingPage() {
           </Accordion>
         </div>
       </section>
+      </Reveal>
 
       {/* ── Closing CTA ─────────────────────────────────────── */}
       <section className="relative bg-ink text-ink-foreground">
