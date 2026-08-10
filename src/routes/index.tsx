@@ -294,6 +294,7 @@ function LandingPage() {
           ))}
         </div>
       </section>
+      </Reveal>
 
       {/* ── Pricing ─────────────────────────────────────────── */}
       <Reveal>
