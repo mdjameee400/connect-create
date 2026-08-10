@@ -194,6 +194,7 @@ function LandingPage() {
       </section>
 
       {/* ── Features ────────────────────────────────────────── */}
+      <Reveal>
       <section id="features" className="border-b">
         <div className="mx-auto max-w-6xl px-5 py-20">
           <div className="max-w-2xl">
