@@ -379,6 +379,7 @@ function LandingPage() {
       </section>
 
       {/* ── FAQ ─────────────────────────────────────────────── */}
+      <Reveal>
       <section id="faq" className="border-b">
         <div className="mx-auto max-w-3xl px-5 py-20">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-center">
