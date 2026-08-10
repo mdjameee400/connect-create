@@ -62,6 +62,7 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+      <ScrollProgress />
       {/* ── Nav ─────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
         <div className="mx-auto max-w-6xl h-16 px-5 flex items-center gap-3">
@@ -70,10 +71,10 @@ function LandingPage() {
             <span className="font-semibold tracking-tight">Orbital Connect</span>
           </Link>
           <nav className="hidden md:flex items-center gap-7 ml-8 text-sm text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#how" className="hover:text-foreground transition-colors">How it works</a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
-            <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
+            <SmoothLink href="#features" className="hover:text-foreground transition-colors">Features</SmoothLink>
+            <SmoothLink href="#how" className="hover:text-foreground transition-colors">How it works</SmoothLink>
+            <SmoothLink href="#pricing" className="hover:text-foreground transition-colors">Pricing</SmoothLink>
+            <SmoothLink href="#faq" className="hover:text-foreground transition-colors">FAQ</SmoothLink>
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {!signedIn && (
