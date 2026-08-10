@@ -192,6 +192,7 @@ function LandingPage() {
           <span>Educators</span>
         </div>
       </section>
+      </Reveal>
 
       {/* ── Features ────────────────────────────────────────── */}
       <Reveal>
