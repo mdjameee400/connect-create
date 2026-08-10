@@ -119,7 +119,7 @@ function LandingPage() {
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="h-12 px-6" asChild>
-              <a href="#how">See how it works</a>
+              <SmoothLink href="#how">See how it works</SmoothLink>
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
