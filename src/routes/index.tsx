@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
+import { ScrollProgress, SmoothLink, Reveal } from "@/components/scroll-motion";
 import {
   Accordion,
   AccordionContent,
