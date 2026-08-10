@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
+import { ScrollProgress, SmoothLink, Reveal } from "@/components/scroll-motion";
 import {
   Accordion,
   AccordionContent,
@@ -62,6 +63,7 @@ function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
+      <ScrollProgress />
       {/* ── Nav ─────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur-md">
         <div className="mx-auto max-w-6xl h-16 px-5 flex items-center gap-3">
@@ -70,10 +72,10 @@ function LandingPage() {
             <span className="font-semibold tracking-tight">Orbital Connect</span>
           </Link>
           <nav className="hidden md:flex items-center gap-7 ml-8 text-sm text-muted-foreground">
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#how" className="hover:text-foreground transition-colors">How it works</a>
-            <a href="#pricing" className="hover:text-foreground transition-colors">Pricing</a>
-            <a href="#faq" className="hover:text-foreground transition-colors">FAQ</a>
+            <SmoothLink href="#features" className="hover:text-foreground transition-colors">Features</SmoothLink>
+            <SmoothLink href="#how" className="hover:text-foreground transition-colors">How it works</SmoothLink>
+            <SmoothLink href="#pricing" className="hover:text-foreground transition-colors">Pricing</SmoothLink>
+            <SmoothLink href="#faq" className="hover:text-foreground transition-colors">FAQ</SmoothLink>
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {!signedIn && (
@@ -119,7 +121,7 @@ function LandingPage() {
               </Link>
             </Button>
             <Button size="lg" variant="outline" className="h-12 px-6" asChild>
-              <a href="#how">See how it works</a>
+              <SmoothLink href="#how">See how it works</SmoothLink>
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
@@ -192,6 +194,7 @@ function LandingPage() {
       </section>
 
       {/* ── Features ────────────────────────────────────────── */}
+      <Reveal>
       <section id="features" className="border-b">
         <div className="mx-auto max-w-6xl px-5 py-20">
           <div className="max-w-2xl">
@@ -243,8 +246,10 @@ function LandingPage() {
           </div>
         </div>
       </section>
+      </Reveal>
 
       {/* ── How it works ────────────────────────────────────── */}
+      <Reveal>
       <section id="how" className="border-b">
         <div className="mx-auto max-w-6xl px-5 py-20 space-y-20">
           <div className="max-w-2xl">
@@ -292,8 +297,10 @@ function LandingPage() {
           ))}
         </div>
       </section>
+      </Reveal>
 
       {/* ── Pricing ─────────────────────────────────────────── */}
+      <Reveal>
       <section id="pricing" className="border-b">
         <div className="mx-auto max-w-6xl px-5 py-20">
           <div className="max-w-2xl">
@@ -375,8 +382,10 @@ function LandingPage() {
           </div>
         </div>
       </section>
+      </Reveal>
 
       {/* ── FAQ ─────────────────────────────────────────────── */}
+      <Reveal>
       <section id="faq" className="border-b">
         <div className="mx-auto max-w-3xl px-5 py-20">
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight text-center">
@@ -413,6 +422,7 @@ function LandingPage() {
           </Accordion>
         </div>
       </section>
+      </Reveal>
 
       {/* ── Closing CTA ─────────────────────────────────────── */}
       <section className="relative bg-ink text-ink-foreground">
