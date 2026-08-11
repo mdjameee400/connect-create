@@ -35,19 +35,8 @@ export const Route = createFileRoute("/api/chat")({
         const messages = Array.isArray(body.messages) ? body.messages.slice(-20) : [];
         if (!messages.length) return new Response("Messages are required", { status: 400 });
 
-        console.log("[assistant] request received");
         const apiKey = process.env["LOVABLE_API_KEY"];
         if (!apiKey) return new Response("AI is not configured", { status: 500 });
-
-        if (messages[0]?.content === "PING") {
-          const t0 = Date.now();
-          const r = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
-            body: JSON.stringify({ model: "openai/gpt-5.6-sol", input: "hi", stream: true }),
-          });
-          return new Response(`status=${r.status} ms=${Date.now() - t0}`);
-        }
 
         const upstream = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
           method: "POST",
@@ -73,7 +62,6 @@ export const Route = createFileRoute("/api/chat")({
           }),
         });
 
-        console.log("[assistant] upstream", upstream.status, Boolean(upstream.body));
         if (!upstream.ok || !upstream.body) {
           const text = await upstream.text().catch(() => "");
           const status = upstream.status === 429 || upstream.status === 402 ? upstream.status : 500;
@@ -91,30 +79,34 @@ export const Route = createFileRoute("/api/chat")({
         const decoder = new TextDecoder();
         const encoder = new TextEncoder();
         const reader = upstream.body.getReader();
-        let buffer = "";
 
         const stream = new ReadableStream<Uint8Array>({
-          async pull(controller) {
-            const { done, value } = await reader.read();
-            if (done) {
-              controller.close();
-              return;
-            }
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
-            buffer = lines.pop() ?? "";
-            for (const line of lines) {
-              if (!line.startsWith("data:")) continue;
-              const data = line.slice(5).trim();
-              if (!data || data === "[DONE]") continue;
-              try {
-                const event = JSON.parse(data) as { type?: string; delta?: string };
-                if (event.type === "response.output_text.delta" && event.delta) {
-                  controller.enqueue(encoder.encode(event.delta));
+          async start(controller) {
+            let buffer = "";
+            try {
+              for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n");
+                buffer = lines.pop() ?? "";
+                for (const line of lines) {
+                  if (!line.startsWith("data:")) continue;
+                  const data = line.slice(5).trim();
+                  if (!data || data === "[DONE]") continue;
+                  try {
+                    const event = JSON.parse(data) as { type?: string; delta?: string };
+                    if (event.type === "response.output_text.delta" && event.delta) {
+                      controller.enqueue(encoder.encode(event.delta));
+                    }
+                  } catch {
+                    /* partial event */
+                  }
                 }
-              } catch {
-                /* partial event */
               }
+              controller.close();
+            } catch (err) {
+              controller.error(err);
             }
           },
           cancel(reason) {
@@ -128,6 +120,7 @@ export const Route = createFileRoute("/api/chat")({
             "Cache-Control": "no-cache",
           },
         });
+
       },
     },
   },
