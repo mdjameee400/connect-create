@@ -39,6 +39,16 @@ export const Route = createFileRoute("/api/chat")({
         const apiKey = process.env["LOVABLE_API_KEY"];
         if (!apiKey) return new Response("AI is not configured", { status: 500 });
 
+        if (messages[0]?.content === "PING") {
+          const t0 = Date.now();
+          const r = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
+            body: JSON.stringify({ model: "openai/gpt-5.6-sol", input: "hi", stream: true }),
+          });
+          return new Response(`status=${r.status} ms=${Date.now() - t0}`);
+        }
+
         const upstream = await fetch("https://ai.gateway.lovable.dev/v1/responses", {
           method: "POST",
           headers: {
