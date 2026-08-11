@@ -35,6 +35,7 @@ export const Route = createFileRoute("/api/chat")({
         const messages = Array.isArray(body.messages) ? body.messages.slice(-20) : [];
         if (!messages.length) return new Response("Messages are required", { status: 400 });
 
+        console.log("[assistant] request received");
         const apiKey = process.env["LOVABLE_API_KEY"];
         if (!apiKey) return new Response("AI is not configured", { status: 500 });
 
@@ -62,6 +63,7 @@ export const Route = createFileRoute("/api/chat")({
           }),
         });
 
+        console.log("[assistant] upstream", upstream.status, Boolean(upstream.body));
         if (!upstream.ok || !upstream.body) {
           const text = await upstream.text().catch(() => "");
           const status = upstream.status === 429 || upstream.status === 402 ? upstream.status : 500;
