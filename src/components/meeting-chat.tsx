@@ -1,88 +1,39 @@
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Loader2 } from "lucide-react";
+import { Send, Loader2, RotateCcw } from "lucide-react";
+import type { ChatMessage } from "@/hooks/use-meeting-chat";
 
-export type ChatMessage = {
-  id: string;
-  sender_id: string;
-  sender_name: string;
-  body: string;
-  created_at: string;
-};
-
+/** Presentational chat panel — all state lives in the meeting room. */
 export function MeetingChat({
-  meetingId,
-  displayName,
-  onNewMessage,
+  messages,
+  loading,
+  me,
+  typing,
+  onSend,
+  onRetry,
+  onTyping,
 }: {
-  meetingId: string;
-  displayName: string;
-  onNewMessage?: () => void;
+  messages: ChatMessage[];
+  loading: boolean;
+  me: string | null;
+  typing: string[];
+  onSend: (body: string) => void;
+  onRetry: (id: string) => void;
+  onTyping: () => void;
 }) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [me, setMe] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const notifyRef = useRef(onNewMessage);
-  notifyRef.current = onNewMessage;
-
-  useEffect(() => {
-    let active = true;
-
-    (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (active) setMe(u.user?.id ?? null);
-      const { data } = await supabase
-        .from("meeting_messages")
-        .select("id, sender_id, sender_name, body, created_at")
-        .eq("meeting_id", meetingId)
-        .order("created_at", { ascending: true })
-        .limit(200);
-      if (!active) return;
-      setMessages(data ?? []);
-      setLoading(false);
-    })();
-
-    const channel = supabase
-      .channel(`chat:${meetingId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "meeting_messages", filter: `meeting_id=eq.${meetingId}` },
-        (payload) => {
-          const row = payload.new as ChatMessage;
-          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
-          notifyRef.current?.();
-        },
-      )
-      .subscribe();
-
-    return () => {
-      active = false;
-      supabase.removeChannel(channel);
-    };
-  }, [meetingId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+  }, [messages.length, typing.length]);
 
-  const send = async () => {
+  const submit = () => {
     const body = text.trim();
-    if (!body || !me || sending) return;
-    setSending(true);
+    if (!body) return;
     setText("");
-    const { error } = await supabase.from("meeting_messages").insert({
-      meeting_id: meetingId,
-      sender_id: me,
-      sender_name: displayName,
-      body,
-    });
-    if (error) setText(body);
-    setSending(false);
+    onSend(body);
   };
 
   return (
@@ -98,37 +49,67 @@ export function MeetingChat({
             No messages yet. Say hello to the room.
           </p>
         ) : (
-          messages.map((m) => (
-            <div key={m.id} className="flex gap-2">
-              <div className="w-7 h-7 shrink-0 rounded-full bg-secondary grid place-items-center text-[11px] font-semibold">
-                {m.sender_name.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="text-[11px] text-muted-foreground">
-                  {m.sender_id === me ? "You" : m.sender_name} ·{" "}
-                  {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          messages.map((m) =>
+            m.sender_id === "system" ? (
+              <p key={m.id} className="text-[11px] text-muted-foreground text-center">
+                {m.body}
+              </p>
+            ) : (
+              <div key={m.id} className="flex gap-2">
+                <div className="w-7 h-7 shrink-0 rounded-full bg-secondary grid place-items-center text-[11px] font-semibold">
+                  {m.sender_name.charAt(0).toUpperCase()}
                 </div>
-                <div className="text-sm break-words whitespace-pre-wrap">{m.body}</div>
+                <div className="min-w-0">
+                  <div className="text-[11px] text-muted-foreground">
+                    {m.sender_id === me ? "You" : m.sender_name} ·{" "}
+                    {new Date(m.created_at).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                    {m.pending && " · sending"}
+                  </div>
+                  <div
+                    className={`text-sm break-words whitespace-pre-wrap ${m.pending ? "opacity-60" : ""}`}
+                  >
+                    {m.body}
+                  </div>
+                  {m.failed && (
+                    <button
+                      onClick={() => onRetry(m.id)}
+                      className="mt-0.5 inline-flex items-center gap-1 text-[11px] text-destructive hover:underline"
+                    >
+                      <RotateCcw className="w-3 h-3" /> Not sent — retry
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            ),
+          )
         )}
         <div ref={bottomRef} />
       </div>
+      {typing.length > 0 && (
+        <div className="px-4 pb-1 text-[11px] text-muted-foreground">
+          {typing.join(", ")} {typing.length === 1 ? "is" : "are"} typing…
+        </div>
+      )}
       <div className="p-3 border-t flex gap-2">
         <Input
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value);
+            onTyping();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              void send();
+              submit();
             }
           }}
           placeholder="Message the room"
           aria-label="Message"
         />
-        <Button size="icon" onClick={() => void send()} disabled={!text.trim() || sending} aria-label="Send message">
+        <Button size="icon" onClick={submit} disabled={!text.trim()} aria-label="Send message">
           <Send className="w-4 h-4" />
         </Button>
       </div>
