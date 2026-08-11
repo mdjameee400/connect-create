@@ -10,6 +10,8 @@ import { MeetingChat } from "@/components/meeting-chat";
 import { MeetingWhiteboard } from "@/components/meeting-whiteboard";
 import { CallRecorder } from "@/lib/call-recorder";
 import { fetchCurrentTeam } from "@/lib/team";
+import { useMeetingChat } from "@/hooks/use-meeting-chat";
+
 
 
 type Peer = {
@@ -59,7 +61,15 @@ export function MeetingRoom({
   const [panel, setPanel] = useState<"none" | "chat" | "board">("none");
   const [unread, setUnread] = useState(0);
   const [recState, setRecState] = useState<"idle" | "recording" | "saving">("idle");
+  const [remoteRecording, setRemoteRecording] = useState(false);
   const recorderInstance = useRef<CallRecorder | null>(null);
+  const chat = useMeetingChat(meetingId, displayName);
+  const chatNoticeRef = useRef(chat.addNotice);
+  chatNoticeRef.current = chat.addNotice;
+  const panelRef = useRef(panel);
+  panelRef.current = panel;
+
+
 
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
@@ -95,8 +105,12 @@ export function MeetingRoom({
       };
       peersRef.current[remoteId] = peer;
       updatePeers();
+      // Keep an in-progress recording's grid in sync with who is in the room.
+      void recorderInstance.current?.addSource({ id: remoteId, stream, name: remoteName });
+      chatNoticeRef.current(`${remoteName} joined the meeting`);
 
       localStreamRef.current?.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
+
 
       pc.ontrack = (e) => {
         stream.addTrack(e.track);
@@ -154,8 +168,11 @@ export function MeetingRoom({
     if (!p) return;
     try { p.pc.close(); } catch { /* ignore */ }
     delete peersRef.current[id];
+    recorderInstance.current?.removeSource(id);
+    chatNoticeRef.current(`${p.name} left the meeting`);
     updatePeers();
   }, []);
+
 
   const flushPendingIce = async (peer: Peer) => {
     while (peer.pendingCandidates.length) {
@@ -196,7 +213,15 @@ export function MeetingRoom({
           createPeer(from, fromName, true);
           // Also greet the newcomer so they know our name
           send("hello", { from: peerIdRef.current, fromName: displayNameRef.current, to: from });
+          // Tell the newcomer the room is being recorded.
+          if (recorderInstance.current) send("rec", { from: peerIdRef.current, active: true });
         });
+
+        channel.on("broadcast", { event: "rec" }, ({ payload }) => {
+          const { active } = payload as { active: boolean };
+          setRemoteRecording(active);
+        });
+
 
         channel.on("broadcast", { event: "hello" }, ({ payload }) => {
           const { from, fromName, to } = payload as { from: string; fromName: string; to: string };
@@ -308,8 +333,10 @@ export function MeetingRoom({
     if (recState === "saving") return;
     if (recState === "recording") {
       setRecState("saving");
-      const res = await recorderInstance.current?.stop();
+      const rec = recorderInstance.current;
       recorderInstance.current = null;
+      send("rec", { from: peerIdRef.current, active: false });
+      const res = await rec?.stop();
       setRecState("idle");
       if (res?.ok && res.id) {
         toast.success("Recording saved to your library", {
@@ -333,11 +360,12 @@ export function MeetingRoom({
         title: `${meetingTitle} · ${new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`,
       });
       await rec.start([
-        { stream: localStreamRef.current, name: `${displayName} (you)` },
-        ...Object.values(peersRef.current).map((p) => ({ stream: p.stream, name: p.name })),
+        { id: "self", stream: localStreamRef.current, name: `${displayName} (you)` },
+        ...Object.values(peersRef.current).map((p) => ({ id: p.id, stream: p.stream, name: p.name })),
       ]);
       recorderInstance.current = rec;
       setRecState("recording");
+      send("rec", { from: peerIdRef.current, active: true });
       toast.success("Recording started — uploading live");
     } catch (err) {
       console.error(err);
@@ -349,6 +377,20 @@ export function MeetingRoom({
   useEffect(() => {
     if (panel === "chat") setUnread(0);
   }, [panel]);
+
+  // Count messages that arrive while the chat panel is closed.
+  const seenCount = useRef(0);
+  useEffect(() => {
+    if (panelRef.current === "chat") {
+      seenCount.current = chat.messages.length;
+      setUnread(0);
+      return;
+    }
+    const delta = chat.messages.length - seenCount.current;
+    seenCount.current = chat.messages.length;
+    if (delta > 0) setUnread((n) => n + delta);
+  }, [chat.messages.length]);
+
 
 
   const tiles = [
@@ -379,11 +421,20 @@ export function MeetingRoom({
         </div>
       )}
 
+      {(recState !== "idle" || remoteRecording) && (
+        <div className="mx-auto inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium">
+          <span className="w-2 h-2 rounded-full bg-destructive animate-pulse" />
+          {recState === "saving" ? "Saving recording…" : "This meeting is being recorded"}
+        </div>
+      )}
+
       <div className={`grid gap-4 ${panel === "none" ? "" : "lg:grid-cols-[1fr_360px]"}`}>
         <div className="space-y-4 min-w-0">
-          {panel === "board" ? (
+          {/* The board stays mounted so strokes keep syncing when it isn't on screen. */}
+          <div className={panel === "board" ? "" : "hidden"}>
             <MeetingWhiteboard meetingId={meetingId} />
-          ) : (
+          </div>
+          {panel !== "board" && (
             <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
               {tiles.map((t) => (
                 <VideoTile
@@ -423,19 +474,41 @@ export function MeetingRoom({
             <div className="flex-1 min-h-0">
               {panel === "chat" ? (
                 <MeetingChat
-                  meetingId={meetingId}
-                  displayName={displayName}
-                  onNewMessage={() => setUnread((n) => n + 1)}
+                  messages={chat.messages}
+                  loading={chat.loading}
+                  me={chat.me}
+                  typing={chat.typing}
+                  onSend={(body) => void chat.send(body)}
+                  onRetry={(id) => void chat.retry(id)}
+                  onTyping={chat.notifyTyping}
                 />
               ) : (
-                <div className="p-4 text-sm text-muted-foreground">
-                  The whiteboard is open on the left. Draw together in real time.
+                <div className="p-3 space-y-3 overflow-y-auto h-full">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    In the room · {tiles.length}
+                  </p>
+                  <ul className="space-y-1.5">
+                    {tiles.map((t) => (
+                      <li key={t.id} className="flex items-center gap-2 text-sm">
+                        <span className="w-6 h-6 rounded-full bg-secondary grid place-items-center text-[11px] font-semibold">
+                          {t.name.charAt(0).toUpperCase()}
+                        </span>
+                        <span className="truncate">{t.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-xs text-muted-foreground border-t pt-3">
+                    Draw on the board to the left — pen, colours, stroke size, eraser and undo are in
+                    its toolbar. Everything you draw appears live for everyone.
+                  </p>
                 </div>
               )}
             </div>
           </aside>
         )}
       </div>
+
+
 
       <div className="flex items-center justify-center gap-2 py-2 flex-wrap">
         <Button size="lg" variant={micOn ? "secondary" : "destructive"} className="rounded-full h-12 w-12 p-0" onClick={toggleMic} aria-label="Toggle mic">

@@ -28,7 +28,6 @@ export class ChunkedRecording {
   private bytes = 0;
   private queue: Promise<void> = Promise.resolve();
   private failed = false;
-  private localChunks: Blob[] = [];
 
   constructor(private readonly opts: ChunkedRecordingOptions) {}
 
@@ -54,10 +53,12 @@ export class ChunkedRecording {
     if (error) throw error;
   }
 
-  /** Queue a chunk upload. Non-blocking; ordering is preserved. */
+  /**
+   * Queue a chunk upload. Non-blocking; ordering is preserved and the blob is
+   * released as soon as it is uploaded, so memory stays flat for long takes.
+   */
   push(blob: Blob) {
     if (!blob.size || this.failed) return;
-    this.localChunks.push(blob);
     const index = ++this.index;
     this.bytes += blob.size;
     const size = this.bytes;
@@ -81,39 +82,53 @@ export class ChunkedRecording {
     });
   }
 
-  /** Wait for pending chunk uploads, then stitch parts into one file. */
+  /** Wait for pending chunk uploads, then stitch the uploaded parts into one file. */
   async finalize(durationSeconds: number) {
     await this.queue;
-    if (this.failed) return { ok: false as const };
+    if (this.failed || this.index === 0) return { ok: false as const };
 
     await supabase
       .from("recordings")
       .update({ upload_status: "uploading", duration_seconds: durationSeconds })
       .eq("id", this.id);
 
-    const blob = new Blob(this.localChunks, { type: this.opts.mime });
-    const { error } = await supabase.storage.from(BUCKET).upload(this.storagePath, blob, {
-      contentType: this.opts.mime,
-      upsert: true,
-    });
-    if (error) {
-      console.error(error);
+    try {
+      const blob = await stitchParts(this.opts.userId, this.id, this.index, this.opts.mime);
+      const { error } = await supabase.storage.from(BUCKET).upload(this.storagePath, blob, {
+        contentType: this.opts.mime,
+        upsert: true,
+      });
+      if (error) throw error;
+
+      await removeParts(this.opts.userId, this.id, this.index);
+      await supabase
+        .from("recordings")
+        .update({
+          upload_status: "ready",
+          size_bytes: blob.size,
+          duration_seconds: durationSeconds,
+          parts_count: 0,
+        })
+        .eq("id", this.id);
+      return { ok: true as const };
+    } catch (err) {
+      console.error(err);
+      // Leave parts in place so the Library "Finalize" action can recover them.
       await supabase.from("recordings").update({ upload_status: "failed" }).eq("id", this.id);
       return { ok: false as const };
     }
-
-    await removeParts(this.opts.userId, this.id, this.index);
-    await supabase
-      .from("recordings")
-      .update({
-        upload_status: "ready",
-        size_bytes: blob.size,
-        duration_seconds: durationSeconds,
-        parts_count: 0,
-      })
-      .eq("id", this.id);
-    return { ok: true as const };
   }
+}
+
+/** Download every uploaded part and concatenate them into a single blob. */
+async function stitchParts(userId: string, id: string, count: number, mime: string) {
+  const blobs: Blob[] = [];
+  for (let i = 1; i <= count; i++) {
+    const { data, error } = await supabase.storage.from(BUCKET).download(partPath(userId, id, i));
+    if (error || !data) throw error ?? new Error(`Missing part ${i}`);
+    blobs.push(data);
+  }
+  return new Blob(blobs, { type: mime });
 }
 
 async function removeParts(userId: string, id: string, count: number) {
@@ -121,6 +136,7 @@ async function removeParts(userId: string, id: string, count: number) {
   const paths = Array.from({ length: count }, (_, i) => partPath(userId, id, i + 1));
   await supabase.storage.from(BUCKET).remove(paths);
 }
+
 
 /**
  * Recover a recording whose tab died mid-capture: download every uploaded

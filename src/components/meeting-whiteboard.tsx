@@ -6,22 +6,45 @@ import { Eraser, Trash2, Undo2 } from "lucide-react";
 type Point = { x: number; y: number };
 export type Stroke = {
   id: string;
+  author: string;
   points: Point[];
   color: string;
   width: number;
-  erase?: boolean;
 };
 
 const COLORS = ["#111111", "#6b7280", "#dc2626", "#2563eb", "#16a34a"];
 const W = 1600;
 const H = 900;
+const FLUSH_MS = 60;
+
+function distanceToSegment(p: Point, a: Point, b: Point) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
+  const cx = a.x + t * dx;
+  const cy = a.y + t * dy;
+  return Math.hypot(p.x - cx, p.y - cy);
+}
+
+function hits(stroke: Stroke, p: Point, radius: number) {
+  const r = radius + stroke.width / 2;
+  if (stroke.points.length === 1) return Math.hypot(stroke.points[0]!.x - p.x, stroke.points[0]!.y - p.y) <= r;
+  for (let i = 1; i < stroke.points.length; i++) {
+    if (distanceToSegment(p, stroke.points[i - 1]!, stroke.points[i]!) <= r) return true;
+  }
+  return false;
+}
 
 export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const strokesRef = useRef<Stroke[]>([]);
+  const liveRef = useRef<Record<string, Stroke>>({});
   const drawingRef = useRef<Stroke | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const meRef = useRef<string | null>(null);
+  const meRef = useRef<string>(crypto.randomUUID());
+  const lastFlush = useRef(0);
+  const sentUpTo = useRef(0);
 
   const [color, setColor] = useState(COLORS[0]!);
   const [width, setWidth] = useState(4);
@@ -31,16 +54,27 @@ export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const targetW = Math.round(W * dpr);
+    if (canvas.width !== targetW) {
+      canvas.width = targetW;
+      canvas.height = Math.round(H * dpr);
+    }
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
     ctx.clearRect(0, 0, W, H);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, W, H);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    const all = drawingRef.current ? [...strokesRef.current, drawingRef.current] : strokesRef.current;
+    const all = [
+      ...strokesRef.current,
+      ...Object.values(liveRef.current),
+      ...(drawingRef.current ? [drawingRef.current] : []),
+    ];
     for (const s of all) {
       if (s.points.length < 1) continue;
-      ctx.strokeStyle = s.erase ? "#ffffff" : s.color;
-      ctx.lineWidth = s.erase ? s.width * 4 : s.width;
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = s.width;
       ctx.beginPath();
       ctx.moveTo(s.points[0]!.x, s.points[0]!.y);
       for (const p of s.points.slice(1)) ctx.lineTo(p.x, p.y);
@@ -54,7 +88,7 @@ export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
 
     (async () => {
       const { data: u } = await supabase.auth.getUser();
-      meRef.current = u.user?.id ?? null;
+      if (u.user?.id) meRef.current = u.user.id;
       const { data } = await supabase
         .from("meeting_board_strokes")
         .select("stroke")
@@ -68,21 +102,37 @@ export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
 
     const channel = supabase
       .channel(`board:${meetingId}`, { config: { broadcast: { self: false } } })
-      .on("broadcast", { event: "stroke" }, ({ payload }) => {
+      .on("broadcast", { event: "stroke:progress" }, ({ payload }) => {
         const s = payload as Stroke;
-        if (strokesRef.current.some((x) => x.id === s.id)) return;
-        strokesRef.current.push(s);
+        liveRef.current[s.id] = s;
+        redraw();
+      })
+      .on("broadcast", { event: "stroke:commit" }, ({ payload }) => {
+        const s = payload as Stroke;
+        delete liveRef.current[s.id];
+        if (!strokesRef.current.some((x) => x.id === s.id)) strokesRef.current.push(s);
+        redraw();
+      })
+      .on("broadcast", { event: "stroke:remove" }, ({ payload }) => {
+        const { ids } = payload as { ids: string[] };
+        strokesRef.current = strokesRef.current.filter((s) => !ids.includes(s.id));
+        ids.forEach((id) => delete liveRef.current[id]);
         redraw();
       })
       .on("broadcast", { event: "clear" }, () => {
         strokesRef.current = [];
+        liveRef.current = {};
         redraw();
       })
       .subscribe();
     channelRef.current = channel;
 
+    const onResize = () => redraw();
+    window.addEventListener("resize", onResize);
+
     return () => {
       active = false;
+      window.removeEventListener("resize", onResize);
       supabase.removeChannel(channel);
     };
   }, [meetingId, redraw]);
@@ -95,22 +145,62 @@ export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
     };
   };
 
+  const eraseAt = async (p: Point) => {
+    const radius = width * 3;
+    const hitIds = strokesRef.current.filter((s) => hits(s, p, radius)).map((s) => s.id);
+    if (!hitIds.length) return;
+    strokesRef.current = strokesRef.current.filter((s) => !hitIds.includes(s.id));
+    redraw();
+    channelRef.current?.send({ type: "broadcast", event: "stroke:remove", payload: { ids: hitIds } });
+    for (const id of hitIds) {
+      await supabase
+        .from("meeting_board_strokes")
+        .delete()
+        .eq("meeting_id", meetingId)
+        .eq("stroke->>id", id);
+    }
+  };
+
   const start = (e: React.PointerEvent<HTMLCanvasElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
+    const p = toBoard(e);
+    if (erasing) {
+      void eraseAt(p);
+      drawingRef.current = null;
+      return;
+    }
     drawingRef.current = {
       id: crypto.randomUUID(),
-      points: [toBoard(e)],
+      author: meRef.current,
+      points: [p],
       color,
       width,
-      erase: erasing,
     };
+    sentUpTo.current = 0;
     redraw();
   };
 
   const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawingRef.current) return;
-    drawingRef.current.points.push(toBoard(e));
+    if (e.buttons === 0) return;
+    const p = toBoard(e);
+    if (erasing) {
+      void eraseAt(p);
+      return;
+    }
+    const stroke = drawingRef.current;
+    if (!stroke) return;
+    stroke.points.push(p);
     redraw();
+    const now = Date.now();
+    if (now - lastFlush.current >= FLUSH_MS) {
+      lastFlush.current = now;
+      sentUpTo.current = stroke.points.length;
+      channelRef.current?.send({
+        type: "broadcast",
+        event: "stroke:progress",
+        payload: { ...stroke, points: [...stroke.points] },
+      });
+    }
   };
 
   const end = async () => {
@@ -119,31 +209,30 @@ export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
     if (!stroke || stroke.points.length === 0) return;
     strokesRef.current.push(stroke);
     redraw();
-    channelRef.current?.send({ type: "broadcast", event: "stroke", payload: stroke });
-    if (meRef.current) {
-      await supabase.from("meeting_board_strokes").insert({
-        meeting_id: meetingId,
-        author_id: meRef.current,
-        stroke: JSON.parse(JSON.stringify(stroke)),
-      });
-    }
+    channelRef.current?.send({ type: "broadcast", event: "stroke:commit", payload: stroke });
+    await supabase.from("meeting_board_strokes").insert({
+      meeting_id: meetingId,
+      author_id: meRef.current,
+      stroke: JSON.parse(JSON.stringify(stroke)),
+    });
   };
 
   const undo = async () => {
-    const mine = [...strokesRef.current].reverse().find(Boolean);
+    const mine = [...strokesRef.current].reverse().find((s) => s.author === meRef.current);
     if (!mine) return;
     strokesRef.current = strokesRef.current.filter((s) => s.id !== mine.id);
     redraw();
-    channelRef.current?.send({ type: "broadcast", event: "clear", payload: {} });
-    // Re-broadcast remaining strokes so peers stay in sync after an undo.
-    for (const s of strokesRef.current) {
-      channelRef.current?.send({ type: "broadcast", event: "stroke", payload: s });
-    }
-    await supabase.from("meeting_board_strokes").delete().eq("meeting_id", meetingId).eq("stroke->>id", mine.id);
+    channelRef.current?.send({ type: "broadcast", event: "stroke:remove", payload: { ids: [mine.id] } });
+    await supabase
+      .from("meeting_board_strokes")
+      .delete()
+      .eq("meeting_id", meetingId)
+      .eq("stroke->>id", mine.id);
   };
 
   const clearAll = async () => {
     strokesRef.current = [];
+    liveRef.current = {};
     redraw();
     channelRef.current?.send({ type: "broadcast", event: "clear", payload: {} });
     await supabase.from("meeting_board_strokes").delete().eq("meeting_id", meetingId);
@@ -189,6 +278,7 @@ export function MeetingWhiteboard({ meetingId }: { meetingId: string }) {
         onPointerDown={start}
         onPointerMove={move}
         onPointerUp={() => void end()}
+        onPointerCancel={() => void end()}
         onPointerLeave={() => void end()}
         className="w-full aspect-video rounded-xl border bg-white touch-none cursor-crosshair"
       />
