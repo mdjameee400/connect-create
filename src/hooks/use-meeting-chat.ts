@@ -95,18 +95,31 @@ export function useMeetingChat(meetingId: string, displayName: string) {
   }, [meetingId, merge]);
 
   const send = useCallback(
-    async (raw: string) => {
+    async (raw: string, reuseId?: string) => {
       const body = raw.trim();
-      if (!body || !me) return;
+      if (!body) return;
+      // Always resolve the live session: `me` can still be null right after
+      // mount, and sending without a token is what the backend reports as 404.
+      let senderId = me;
+      if (!senderId) {
+        const { data } = await supabase.auth.getUser();
+        senderId = data.user?.id ?? null;
+        if (senderId) setMe(senderId);
+      }
+      if (!senderId) {
+        toast.error("You're signed out — sign in again to chat");
+        return;
+      }
+
       const msg: ChatMessage = {
-        id: crypto.randomUUID(),
-        sender_id: me,
+        id: reuseId ?? crypto.randomUUID(),
+        sender_id: senderId,
         sender_name: nameRef.current,
         body,
         created_at: new Date().toISOString(),
         pending: true,
       };
-      merge(msg);
+      merge({ ...msg, failed: false });
       channelRef.current?.send({
         type: "broadcast",
         event: "chat",
@@ -119,6 +132,10 @@ export function useMeetingChat(meetingId: string, displayName: string) {
         sender_name: msg.sender_name,
         body: msg.body,
       });
+      if (error) {
+        console.error("chat insert failed", error);
+        toast.error(`Message not saved — ${error.message}`);
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.id === msg.id ? { ...m, pending: false, failed: Boolean(error) } : m,
@@ -132,11 +149,11 @@ export function useMeetingChat(meetingId: string, displayName: string) {
     async (id: string) => {
       const msg = messages.find((m) => m.id === id);
       if (!msg) return;
-      setMessages((prev) => prev.filter((m) => m.id !== id));
-      await send(msg.body);
+      await send(msg.body, id);
     },
     [messages, send],
   );
+
 
   const notifyTyping = useCallback(() => {
     const now = Date.now();
