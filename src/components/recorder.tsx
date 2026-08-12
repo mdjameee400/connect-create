@@ -44,9 +44,14 @@ export function Recorder() {
 
   const stopTracks = () => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
+    extraTracksRef.current.forEach((t) => t.stop());
+    extraTracksRef.current = [];
+    void audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
   };
+
 
   const beginRecording = async () => {
     if (state !== "idle") return;
