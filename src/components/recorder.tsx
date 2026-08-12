@@ -28,6 +28,8 @@ export function Recorder() {
   const chunkedRef = useRef<ChunkedRecording | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const startedAtRef = useRef<number>(0);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const extraTracksRef = useRef<MediaStreamTrack[]>([]);
 
   const [mode, setMode] = useState<Mode>("screen");
   const [mic, setMic] = useState(true);
