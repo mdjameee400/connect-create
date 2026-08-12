@@ -648,7 +648,88 @@ export function MeetingRoom({
             <><Circle className="w-4 h-4 fill-current" /> Record</>
           )}
         </Button>
+        <Button
+          size="lg"
+          variant={annotating ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setAnnotating((v) => !v)}
+          aria-label="Annotate screen"
+        >
+          <Highlighter className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setClearSignal((n) => n + 1)}
+          aria-label="Clear annotations"
+        >
+          <X className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "polls" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "polls" ? "none" : "polls")}
+          aria-label="Toggle polls"
+        >
+          <BarChart3 className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "qa" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "qa" ? "none" : "qa")}
+          aria-label="Toggle Q and A"
+        >
+          <HelpCircle className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "notes" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "notes" ? "none" : "notes")}
+          aria-label="Toggle shared notes"
+        >
+          <StickyNote className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "rooms" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "rooms" ? "none" : "rooms")}
+          aria-label="Toggle breakout rooms"
+        >
+          <DoorOpen className="w-5 h-5" />
+        </Button>
+        {recState === "recording" && (
+          <Button
+            size="lg"
+            variant="secondary"
+            className="rounded-full h-12 gap-1.5 px-4"
+            onClick={() => void markChapter()}
+          >
+            <Bookmark className="w-4 h-4" /> Mark chapter
+          </Button>
+        )}
+        <Button
+          size="lg"
+          variant="secondary"
+          className="rounded-full h-12 w-12 p-0"
+          aria-label="Export notes as PDF"
+          onClick={() =>
+            exportMeetingPdf({
+              title: meetingTitle,
+              messages: chat.messages,
+              notes: notesBodyRef.current,
+              boardCanvas: boardCanvasRef.current,
+            })
+          }
+        >
+          <FileDown className="w-5 h-5" />
+        </Button>
         <Button size="lg" variant="secondary" className="rounded-full h-12 gap-1.5 px-4" onClick={copyLink}>
+
           <Copy className="w-4 h-4" /> Copy link
         </Button>
         <Button size="lg" variant="destructive" className="rounded-full h-12 gap-1.5 px-5" onClick={onLeave}>
