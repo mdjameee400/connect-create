@@ -459,47 +459,94 @@ export function MeetingRoom({
         <div className="space-y-4 min-w-0">
           {/* The board stays mounted so strokes keep syncing when it isn't on screen. */}
           <div className={panel === "board" ? "" : "hidden"}>
-            <MeetingWhiteboard meetingId={meetingId} />
+            <MeetingWhiteboard
+              meetingId={meetingId}
+              displayName={displayName}
+              canvasOut={boardCanvasRef}
+            />
           </div>
           {panel !== "board" && (
-            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-              {tiles.map((t) => (
-                <VideoTile
-                  key={t.id}
-                  name={t.name}
-                  stream={t.stream}
-                  muted={t.muted}
-                  mirror={t.mirror}
-                  isSelf={t.id === "self"}
-                  micOn={t.id === "self" ? micOn : true}
-                  camOn={t.id === "self" ? camOn : true}
-                />
-              ))}
+            <div className="relative">
+              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                {tiles.map((t) => (
+                  <VideoTile
+                    key={t.id}
+                    name={t.name}
+                    stream={t.stream}
+                    muted={t.muted}
+                    mirror={t.mirror}
+                    isSelf={t.id === "self"}
+                    micOn={t.id === "self" ? micOn : true}
+                    camOn={t.id === "self" ? camOn : true}
+                  />
+                ))}
+              </div>
+              <AnnotationLayer
+                meetingId={meetingId}
+                active={annotating}
+                clearSignal={clearSignal}
+              />
+              <ReactionOverlay incoming={reaction} />
             </div>
           )}
+
+          <div className="flex items-center gap-1.5 flex-wrap justify-center">
+            {REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                aria-label={`React ${emoji}`}
+                className="w-9 h-9 rounded-full border hover:bg-secondary text-lg leading-none"
+                onClick={() => {
+                  setReaction({ emoji, name: "You", key: Date.now() });
+                  send("react", { emoji, name: displayName });
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+            <span className="w-px h-6 bg-border mx-1" />
+            <Music className="w-3.5 h-3.5 text-muted-foreground" />
+            {SOUNDS.map((s) => (
+              <Button
+                key={s.id}
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  playSound(s.id);
+                  send("sound", { id: s.id });
+                }}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {panel !== "none" && (
           <aside className="border rounded-xl bg-card overflow-hidden h-[520px] flex flex-col">
-            <div className="flex items-center border-b">
-              <button
-                onClick={() => setPanel("chat")}
-                className={`flex-1 py-2.5 text-sm font-medium ${panel === "chat" ? "bg-secondary" : ""}`}
-              >
-                Chat
-              </button>
-              <button
-                onClick={() => setPanel("board")}
-                className={`flex-1 py-2.5 text-sm font-medium ${panel === "board" ? "bg-secondary" : ""}`}
-              >
-                Whiteboard
-              </button>
-              <Button size="icon" variant="ghost" className="w-9 h-9 mr-1" onClick={() => setPanel("none")} aria-label="Close panel">
+            <div className="flex items-center border-b overflow-x-auto">
+              {([
+                ["chat", "Chat"],
+                ["board", "Board"],
+                ["notes", "Notes"],
+                ["polls", "Polls"],
+                ["qa", "Q&A"],
+                ["rooms", "Rooms"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() => setPanel(id)}
+                  className={`px-3 py-2.5 text-sm font-medium whitespace-nowrap ${panel === id ? "bg-secondary" : ""}`}
+                >
+                  {label}
+                </button>
+              ))}
+              <Button size="icon" variant="ghost" className="w-9 h-9 ml-auto mr-1 shrink-0" onClick={() => setPanel("none")} aria-label="Close panel">
                 <X className="w-4 h-4" />
               </Button>
             </div>
             <div className="flex-1 min-h-0">
-              {panel === "chat" ? (
+              {panel === "chat" && (
                 <MeetingChat
                   messages={chat.messages}
                   loading={chat.loading}
@@ -509,7 +556,18 @@ export function MeetingRoom({
                   onRetry={(id) => void chat.retry(id)}
                   onTyping={chat.notifyTyping}
                 />
-              ) : (
+              )}
+              {panel === "notes" && <MeetingNotes meetingId={meetingId} bodyOut={notesBodyRef} />}
+              {panel === "polls" && <MeetingPolls meetingId={meetingId} />}
+              {panel === "qa" && <MeetingQA meetingId={meetingId} displayName={displayName} />}
+              {panel === "rooms" && (
+                <MeetingBreakouts
+                  meetingId={meetingId}
+                  activeId={breakout?.id ?? null}
+                  onJoin={(b) => setBreakout(b)}
+                />
+              )}
+              {panel === "board" && (
                 <div className="p-3 space-y-3 overflow-y-auto h-full">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     In the room · {tiles.length}
@@ -525,8 +583,8 @@ export function MeetingRoom({
                     ))}
                   </ul>
                   <p className="text-xs text-muted-foreground border-t pt-3">
-                    Draw on the board to the left — pen, colours, stroke size, eraser and undo are in
-                    its toolbar. Everything you draw appears live for everyone.
+                    Pen, shapes, text, colours, eraser and undo are in the board toolbar. Everything
+                    you draw appears live for everyone.
                   </p>
                 </div>
               )}
@@ -534,6 +592,13 @@ export function MeetingRoom({
           </aside>
         )}
       </div>
+
+      {breakout && (
+        <div className="mx-auto text-xs text-muted-foreground">
+          You're in breakout room “{breakout.name}” — open Rooms to return.
+        </div>
+      )}
+
 
 
 
