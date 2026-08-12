@@ -3,14 +3,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Loader2,
-  MessageSquare, PenLine, Circle, Square, X,
+  MessageSquare, PenLine, Circle, Square, X, BarChart3, HelpCircle, StickyNote,
+  DoorOpen, Highlighter, FileDown, Bookmark, Music,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MeetingChat } from "@/components/meeting-chat";
 import { MeetingWhiteboard } from "@/components/meeting-whiteboard";
+import { MeetingPolls, MeetingQA } from "@/components/meeting-engagement";
+import { MeetingNotes } from "@/components/meeting-notes";
+import { MeetingBreakouts, type Breakout } from "@/components/meeting-breakouts";
+import { AnnotationLayer } from "@/components/annotation-layer";
+import { ReactionOverlay, REACTIONS, SOUNDS, playSound } from "@/components/meeting-reactions";
+import { exportMeetingPdf } from "@/lib/meeting-pdf";
 import { CallRecorder } from "@/lib/call-recorder";
 import { fetchCurrentTeam } from "@/lib/team";
 import { useMeetingChat } from "@/hooks/use-meeting-chat";
+
 
 
 
