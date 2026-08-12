@@ -217,7 +217,7 @@ export function MeetingRoom({
         setLocalStream(stream);
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-        const channel = supabase.channel(`room:${slug}`, {
+        const channel = supabase.channel(`room:${slug}${breakout ? `:b:${breakout.id}` : ""}`, {
           config: { broadcast: { self: false, ack: false } },
         });
         channelRef.current = channel;
