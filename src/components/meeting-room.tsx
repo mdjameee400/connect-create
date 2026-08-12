@@ -337,7 +337,7 @@ export function MeetingRoom({
       localStreamRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  }, [slug, breakout?.id]);
 
   const toggleMic = () => {
     if (!localStream) return;
