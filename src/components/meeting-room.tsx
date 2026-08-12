@@ -66,11 +66,19 @@ export function MeetingRoom({
   const [camOn, setCamOn] = useState(true);
   const [status, setStatus] = useState<"connecting" | "ready" | "error">("connecting");
   const [errMsg, setErrMsg] = useState<string>("");
-  const [panel, setPanel] = useState<"none" | "chat" | "board">("none");
+  const [panel, setPanel] = useState<"none" | "chat" | "board" | "notes" | "polls" | "qa" | "rooms">("none");
   const [unread, setUnread] = useState(0);
   const [recState, setRecState] = useState<"idle" | "recording" | "saving">("idle");
   const [remoteRecording, setRemoteRecording] = useState(false);
+  const [breakout, setBreakout] = useState<Breakout | null>(null);
+  const [annotating, setAnnotating] = useState(false);
+  const [clearSignal, setClearSignal] = useState(0);
+  const [reaction, setReaction] = useState<{ emoji: string; name: string; key: number } | null>(null);
+  const boardCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const notesBodyRef = useRef<string>("");
+  const recStartRef = useRef(0);
   const recorderInstance = useRef<CallRecorder | null>(null);
+
   const chat = useMeetingChat(meetingId, displayName);
   const chatNoticeRef = useRef(chat.addNotice);
   chatNoticeRef.current = chat.addNotice;
