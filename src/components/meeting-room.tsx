@@ -238,6 +238,17 @@ export function MeetingRoom({
           setRemoteRecording(active);
         });
 
+        channel.on("broadcast", { event: "react" }, ({ payload }) => {
+          const { emoji, name } = payload as { emoji: string; name: string };
+          setReaction({ emoji, name, key: Date.now() + Math.random() });
+        });
+
+        channel.on("broadcast", { event: "sound" }, ({ payload }) => {
+          playSound((payload as { id: string }).id);
+        });
+
+
+
 
         channel.on("broadcast", { event: "hello" }, ({ payload }) => {
           const { from, fromName, to } = payload as { from: string; fromName: string; to: string };
