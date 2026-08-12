@@ -3,14 +3,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Mic, MicOff, Video as VideoIcon, VideoOff, PhoneOff, Copy, Loader2,
-  MessageSquare, PenLine, Circle, Square, X,
+  MessageSquare, PenLine, Circle, Square, X, BarChart3, HelpCircle, StickyNote,
+  DoorOpen, Highlighter, FileDown, Bookmark, Music,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MeetingChat } from "@/components/meeting-chat";
 import { MeetingWhiteboard } from "@/components/meeting-whiteboard";
+import { MeetingPolls, MeetingQA } from "@/components/meeting-engagement";
+import { MeetingNotes } from "@/components/meeting-notes";
+import { MeetingBreakouts, type Breakout } from "@/components/meeting-breakouts";
+import { AnnotationLayer } from "@/components/annotation-layer";
+import { ReactionOverlay, REACTIONS, SOUNDS, playSound } from "@/components/meeting-reactions";
+import { exportMeetingPdf } from "@/lib/meeting-pdf";
 import { CallRecorder } from "@/lib/call-recorder";
 import { fetchCurrentTeam } from "@/lib/team";
 import { useMeetingChat } from "@/hooks/use-meeting-chat";
+
 
 
 
@@ -58,11 +66,19 @@ export function MeetingRoom({
   const [camOn, setCamOn] = useState(true);
   const [status, setStatus] = useState<"connecting" | "ready" | "error">("connecting");
   const [errMsg, setErrMsg] = useState<string>("");
-  const [panel, setPanel] = useState<"none" | "chat" | "board">("none");
+  const [panel, setPanel] = useState<"none" | "chat" | "board" | "notes" | "polls" | "qa" | "rooms">("none");
   const [unread, setUnread] = useState(0);
   const [recState, setRecState] = useState<"idle" | "recording" | "saving">("idle");
   const [remoteRecording, setRemoteRecording] = useState(false);
+  const [breakout, setBreakout] = useState<Breakout | null>(null);
+  const [annotating, setAnnotating] = useState(false);
+  const [clearSignal, setClearSignal] = useState(0);
+  const [reaction, setReaction] = useState<{ emoji: string; name: string; key: number } | null>(null);
+  const boardCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const notesBodyRef = useRef<string>("");
+  const recStartRef = useRef(0);
   const recorderInstance = useRef<CallRecorder | null>(null);
+
   const chat = useMeetingChat(meetingId, displayName);
   const chatNoticeRef = useRef(chat.addNotice);
   chatNoticeRef.current = chat.addNotice;
@@ -201,7 +217,7 @@ export function MeetingRoom({
         setLocalStream(stream);
         if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-        const channel = supabase.channel(`room:${slug}`, {
+        const channel = supabase.channel(`room:${slug}${breakout ? `:b:${breakout.id}` : ""}`, {
           config: { broadcast: { self: false, ack: false } },
         });
         channelRef.current = channel;
@@ -221,6 +237,17 @@ export function MeetingRoom({
           const { active } = payload as { active: boolean };
           setRemoteRecording(active);
         });
+
+        channel.on("broadcast", { event: "react" }, ({ payload }) => {
+          const { emoji, name } = payload as { emoji: string; name: string };
+          setReaction({ emoji, name, key: Date.now() + Math.random() });
+        });
+
+        channel.on("broadcast", { event: "sound" }, ({ payload }) => {
+          playSound((payload as { id: string }).id);
+        });
+
+
 
 
         channel.on("broadcast", { event: "hello" }, ({ payload }) => {
@@ -310,7 +337,7 @@ export function MeetingRoom({
       localStreamRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slug]);
+  }, [slug, breakout?.id]);
 
   const toggleMic = () => {
     if (!localStream) return;
@@ -348,6 +375,7 @@ export function MeetingRoom({
       return;
     }
 
+
     try {
       const { data: u } = await supabase.auth.getUser();
       const user = u.user;
@@ -364,6 +392,7 @@ export function MeetingRoom({
         ...Object.values(peersRef.current).map((p) => ({ id: p.id, stream: p.stream, name: p.name })),
       ]);
       recorderInstance.current = rec;
+      recStartRef.current = Date.now();
       setRecState("recording");
       send("rec", { from: peerIdRef.current, active: true });
       toast.success("Recording started — uploading live");
@@ -373,6 +402,22 @@ export function MeetingRoom({
       setRecState("idle");
     }
   };
+
+  /** Save a timestamped chapter marker for the running recording. */
+  const markChapter = async () => {
+    const id = recorderInstance.current?.recordingId;
+    if (!id) return;
+    const offset_seconds = Math.floor((Date.now() - recStartRef.current) / 1000);
+    const label = window.prompt("Chapter title", `Chapter at ${Math.floor(offset_seconds / 60)}m`);
+    if (!label) return;
+    const { error } = await supabase
+      .from("recording_chapters")
+      .insert({ recording_id: id, label, offset_seconds });
+    if (error) toast.error(error.message);
+    else toast.success("Chapter marked");
+  };
+
+
 
   useEffect(() => {
     if (panel === "chat") setUnread(0);
@@ -432,47 +477,94 @@ export function MeetingRoom({
         <div className="space-y-4 min-w-0">
           {/* The board stays mounted so strokes keep syncing when it isn't on screen. */}
           <div className={panel === "board" ? "" : "hidden"}>
-            <MeetingWhiteboard meetingId={meetingId} />
+            <MeetingWhiteboard
+              meetingId={meetingId}
+              displayName={displayName}
+              canvasOut={boardCanvasRef}
+            />
           </div>
           {panel !== "board" && (
-            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
-              {tiles.map((t) => (
-                <VideoTile
-                  key={t.id}
-                  name={t.name}
-                  stream={t.stream}
-                  muted={t.muted}
-                  mirror={t.mirror}
-                  isSelf={t.id === "self"}
-                  micOn={t.id === "self" ? micOn : true}
-                  camOn={t.id === "self" ? camOn : true}
-                />
-              ))}
+            <div className="relative">
+              <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+                {tiles.map((t) => (
+                  <VideoTile
+                    key={t.id}
+                    name={t.name}
+                    stream={t.stream}
+                    muted={t.muted}
+                    mirror={t.mirror}
+                    isSelf={t.id === "self"}
+                    micOn={t.id === "self" ? micOn : true}
+                    camOn={t.id === "self" ? camOn : true}
+                  />
+                ))}
+              </div>
+              <AnnotationLayer
+                meetingId={meetingId}
+                active={annotating}
+                clearSignal={clearSignal}
+              />
+              <ReactionOverlay incoming={reaction} />
             </div>
           )}
+
+          <div className="flex items-center gap-1.5 flex-wrap justify-center">
+            {REACTIONS.map((emoji) => (
+              <button
+                key={emoji}
+                aria-label={`React ${emoji}`}
+                className="w-9 h-9 rounded-full border hover:bg-secondary text-lg leading-none"
+                onClick={() => {
+                  setReaction({ emoji, name: "You", key: Date.now() });
+                  send("react", { emoji, name: displayName });
+                }}
+              >
+                {emoji}
+              </button>
+            ))}
+            <span className="w-px h-6 bg-border mx-1" />
+            <Music className="w-3.5 h-3.5 text-muted-foreground" />
+            {SOUNDS.map((s) => (
+              <Button
+                key={s.id}
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  playSound(s.id);
+                  send("sound", { id: s.id });
+                }}
+              >
+                {s.label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {panel !== "none" && (
           <aside className="border rounded-xl bg-card overflow-hidden h-[520px] flex flex-col">
-            <div className="flex items-center border-b">
-              <button
-                onClick={() => setPanel("chat")}
-                className={`flex-1 py-2.5 text-sm font-medium ${panel === "chat" ? "bg-secondary" : ""}`}
-              >
-                Chat
-              </button>
-              <button
-                onClick={() => setPanel("board")}
-                className={`flex-1 py-2.5 text-sm font-medium ${panel === "board" ? "bg-secondary" : ""}`}
-              >
-                Whiteboard
-              </button>
-              <Button size="icon" variant="ghost" className="w-9 h-9 mr-1" onClick={() => setPanel("none")} aria-label="Close panel">
+            <div className="flex items-center border-b overflow-x-auto">
+              {([
+                ["chat", "Chat"],
+                ["board", "Board"],
+                ["notes", "Notes"],
+                ["polls", "Polls"],
+                ["qa", "Q&A"],
+                ["rooms", "Rooms"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() => setPanel(id)}
+                  className={`px-3 py-2.5 text-sm font-medium whitespace-nowrap ${panel === id ? "bg-secondary" : ""}`}
+                >
+                  {label}
+                </button>
+              ))}
+              <Button size="icon" variant="ghost" className="w-9 h-9 ml-auto mr-1 shrink-0" onClick={() => setPanel("none")} aria-label="Close panel">
                 <X className="w-4 h-4" />
               </Button>
             </div>
             <div className="flex-1 min-h-0">
-              {panel === "chat" ? (
+              {panel === "chat" && (
                 <MeetingChat
                   messages={chat.messages}
                   loading={chat.loading}
@@ -482,7 +574,18 @@ export function MeetingRoom({
                   onRetry={(id) => void chat.retry(id)}
                   onTyping={chat.notifyTyping}
                 />
-              ) : (
+              )}
+              {panel === "notes" && <MeetingNotes meetingId={meetingId} bodyOut={notesBodyRef} />}
+              {panel === "polls" && <MeetingPolls meetingId={meetingId} />}
+              {panel === "qa" && <MeetingQA meetingId={meetingId} displayName={displayName} />}
+              {panel === "rooms" && (
+                <MeetingBreakouts
+                  meetingId={meetingId}
+                  activeId={breakout?.id ?? null}
+                  onJoin={(b) => setBreakout(b)}
+                />
+              )}
+              {panel === "board" && (
                 <div className="p-3 space-y-3 overflow-y-auto h-full">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     In the room · {tiles.length}
@@ -498,8 +601,8 @@ export function MeetingRoom({
                     ))}
                   </ul>
                   <p className="text-xs text-muted-foreground border-t pt-3">
-                    Draw on the board to the left — pen, colours, stroke size, eraser and undo are in
-                    its toolbar. Everything you draw appears live for everyone.
+                    Pen, shapes, text, colours, eraser and undo are in the board toolbar. Everything
+                    you draw appears live for everyone.
                   </p>
                 </div>
               )}
@@ -507,6 +610,13 @@ export function MeetingRoom({
           </aside>
         )}
       </div>
+
+      {breakout && (
+        <div className="mx-auto text-xs text-muted-foreground">
+          You're in breakout room “{breakout.name}” — open Rooms to return.
+        </div>
+      )}
+
 
 
 
@@ -555,7 +665,88 @@ export function MeetingRoom({
             <><Circle className="w-4 h-4 fill-current" /> Record</>
           )}
         </Button>
+        <Button
+          size="lg"
+          variant={annotating ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setAnnotating((v) => !v)}
+          aria-label="Annotate screen"
+        >
+          <Highlighter className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant="secondary"
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setClearSignal((n) => n + 1)}
+          aria-label="Clear annotations"
+        >
+          <X className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "polls" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "polls" ? "none" : "polls")}
+          aria-label="Toggle polls"
+        >
+          <BarChart3 className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "qa" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "qa" ? "none" : "qa")}
+          aria-label="Toggle Q and A"
+        >
+          <HelpCircle className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "notes" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "notes" ? "none" : "notes")}
+          aria-label="Toggle shared notes"
+        >
+          <StickyNote className="w-5 h-5" />
+        </Button>
+        <Button
+          size="lg"
+          variant={panel === "rooms" ? "default" : "secondary"}
+          className="rounded-full h-12 w-12 p-0"
+          onClick={() => setPanel(panel === "rooms" ? "none" : "rooms")}
+          aria-label="Toggle breakout rooms"
+        >
+          <DoorOpen className="w-5 h-5" />
+        </Button>
+        {recState === "recording" && (
+          <Button
+            size="lg"
+            variant="secondary"
+            className="rounded-full h-12 gap-1.5 px-4"
+            onClick={() => void markChapter()}
+          >
+            <Bookmark className="w-4 h-4" /> Mark chapter
+          </Button>
+        )}
+        <Button
+          size="lg"
+          variant="secondary"
+          className="rounded-full h-12 w-12 p-0"
+          aria-label="Export notes as PDF"
+          onClick={() =>
+            exportMeetingPdf({
+              title: meetingTitle,
+              messages: chat.messages,
+              notes: notesBodyRef.current,
+              boardCanvas: boardCanvasRef.current,
+            })
+          }
+        >
+          <FileDown className="w-5 h-5" />
+        </Button>
         <Button size="lg" variant="secondary" className="rounded-full h-12 gap-1.5 px-4" onClick={copyLink}>
+
           <Copy className="w-4 h-4" /> Copy link
         </Button>
         <Button size="lg" variant="destructive" className="rounded-full h-12 gap-1.5 px-5" onClick={onLeave}>

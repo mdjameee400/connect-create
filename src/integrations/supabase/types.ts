@@ -46,6 +46,41 @@ export type Database = {
           },
         ]
       }
+      meeting_breakouts: {
+        Row: {
+          closed: boolean
+          created_at: string
+          created_by: string
+          id: string
+          meeting_id: string
+          name: string
+        }
+        Insert: {
+          closed?: boolean
+          created_at?: string
+          created_by: string
+          id?: string
+          meeting_id: string
+          name: string
+        }
+        Update: {
+          closed?: boolean
+          created_at?: string
+          created_by?: string
+          id?: string
+          meeting_id?: string
+          name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_breakouts_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       meeting_messages: {
         Row: {
           body: string
@@ -74,6 +109,189 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "meeting_messages_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_notes: {
+        Row: {
+          body: string
+          meeting_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          body?: string
+          meeting_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          body?: string
+          meeting_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_notes_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: true
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_poll_votes: {
+        Row: {
+          created_at: string
+          id: string
+          meeting_id: string
+          option_index: number
+          poll_id: string
+          voter_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meeting_id: string
+          option_index: number
+          poll_id: string
+          voter_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meeting_id?: string
+          option_index?: number
+          poll_id?: string
+          voter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_poll_votes_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_poll_votes_poll_id_fkey"
+            columns: ["poll_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_polls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_polls: {
+        Row: {
+          closed: boolean
+          created_at: string
+          created_by: string
+          id: string
+          meeting_id: string
+          options: string[]
+          question: string
+        }
+        Insert: {
+          closed?: boolean
+          created_at?: string
+          created_by: string
+          id?: string
+          meeting_id: string
+          options: string[]
+          question: string
+        }
+        Update: {
+          closed?: boolean
+          created_at?: string
+          created_by?: string
+          id?: string
+          meeting_id?: string
+          options?: string[]
+          question?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_polls_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_question_votes: {
+        Row: {
+          created_at: string
+          meeting_id: string
+          question_id: string
+          voter_id: string
+        }
+        Insert: {
+          created_at?: string
+          meeting_id: string
+          question_id: string
+          voter_id: string
+        }
+        Update: {
+          created_at?: string
+          meeting_id?: string
+          question_id?: string
+          voter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_question_votes_meeting_id_fkey"
+            columns: ["meeting_id"]
+            isOneToOne: false
+            referencedRelation: "meetings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meeting_question_votes_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "meeting_questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meeting_questions: {
+        Row: {
+          answered: boolean
+          author_id: string
+          author_name: string
+          body: string
+          created_at: string
+          id: string
+          meeting_id: string
+        }
+        Insert: {
+          answered?: boolean
+          author_id: string
+          author_name?: string
+          body: string
+          created_at?: string
+          id?: string
+          meeting_id: string
+        }
+        Update: {
+          answered?: boolean
+          author_id?: string
+          author_name?: string
+          body?: string
+          created_at?: string
+          id?: string
+          meeting_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meeting_questions_meeting_id_fkey"
             columns: ["meeting_id"]
             isOneToOne: false
             referencedRelation: "meetings"
@@ -151,6 +369,41 @@ export type Database = {
           last_seen_at?: string | null
         }
         Relationships: []
+      }
+      recording_chapters: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string
+          offset_seconds: number
+          recording_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label: string
+          offset_seconds: number
+          recording_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          offset_seconds?: number
+          recording_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recording_chapters_recording_id_fkey"
+            columns: ["recording_id"]
+            isOneToOne: false
+            referencedRelation: "recordings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       recordings: {
         Row: {
