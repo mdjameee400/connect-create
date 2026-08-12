@@ -49,6 +49,7 @@ export function Recorder() {
   };
 
   const beginRecording = async () => {
+    if (state !== "idle") return;
     try {
       const constraints: MediaStreamConstraints & Record<string, unknown> = {
         video: { frameRate: { ideal: 30 }, displaySurface: MODES.find((m) => m.id === mode)?.hint },
@@ -56,19 +57,35 @@ export function Recorder() {
       };
       const displayStream = await navigator.mediaDevices.getDisplayMedia(constraints);
 
-      let combined = displayStream;
+      let micStream: MediaStream | null = null;
       if (mic) {
         try {
-          const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          combined = new MediaStream([
-            ...displayStream.getVideoTracks(),
-            ...displayStream.getAudioTracks(),
-            ...micStream.getAudioTracks(),
-          ]);
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         } catch {
           toast.warning("Microphone unavailable — recording without mic");
         }
       }
+
+      // Mix every audio source into ONE track: MediaRecorder only records the
+      // first audio track, so separate mic + system tracks lose the mic.
+      const audioSources = [
+        ...displayStream.getAudioTracks(),
+        ...(micStream?.getAudioTracks() ?? []),
+      ];
+      let mixedAudio: MediaStreamTrack[] = audioSources;
+      if (audioSources.length > 1) {
+        const ctx = new AudioContext();
+        audioCtxRef.current = ctx;
+        const dest = ctx.createMediaStreamDestination();
+        audioSources.forEach((track) => {
+          ctx.createMediaStreamSource(new MediaStream([track])).connect(dest);
+        });
+        mixedAudio = dest.stream.getAudioTracks();
+      }
+
+      const combined = new MediaStream([...displayStream.getVideoTracks(), ...mixedAudio]);
+      extraTracksRef.current = [...audioSources, ...displayStream.getVideoTracks()];
+
 
       streamRef.current = combined;
       if (videoRef.current) {
