@@ -391,6 +391,7 @@ export function MeetingRoom({
         ...Object.values(peersRef.current).map((p) => ({ id: p.id, stream: p.stream, name: p.name })),
       ]);
       recorderInstance.current = rec;
+      recStartRef.current = Date.now();
       setRecState("recording");
       send("rec", { from: peerIdRef.current, active: true });
       toast.success("Recording started — uploading live");
