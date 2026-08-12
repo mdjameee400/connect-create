@@ -375,6 +375,25 @@ export function MeetingRoom({
       return;
     }
 
+    return undefined;
+  };
+
+  /** Save a timestamped chapter marker for the running recording. */
+  const markChapter = async () => {
+    const id = recorderInstance.current?.recordingId;
+    if (!id) return;
+    const seconds = Math.floor((Date.now() - recStartRef.current) / 1000);
+    const label = window.prompt("Chapter title", `Chapter at ${Math.floor(seconds / 60)}m`);
+    if (!label) return;
+    const { error } = await supabase
+      .from("recording_chapters")
+      .insert({ recording_id: id, label, at_seconds: seconds });
+    if (error) toast.error(error.message);
+    else toast.success("Chapter marked");
+  };
+
+  const unusedChapterGuard = async () => {
+
     try {
       const { data: u } = await supabase.auth.getUser();
       const user = u.user;
