@@ -11,8 +11,8 @@ export const Route = createFileRoute("/v/$id")({
   component: SharePage,
   head: () => ({
     meta: [
-      { title: "Recording — Orbital Connect" },
-      { name: "description", content: "Watch this screen recording shared via Orbital Connect." },
+      { title: "Recording — Connect Orbital" },
+      { name: "description", content: "Watch this screen recording shared via Connect Orbital." },
     ],
   }),
 });
@@ -60,7 +60,7 @@ function SharePage() {
           <div className="w-8 h-8 rounded-lg bg-brand grid place-items-center">
             <Video className="w-4 h-4" />
           </div>
-          <span className="font-semibold">Orbital Connect</span>
+          <span className="font-semibold">Connect Orbital</span>
         </Link>
         <div className="ml-auto">
           <Button size="sm" variant="secondary" className="gap-1.5" onClick={copy}>

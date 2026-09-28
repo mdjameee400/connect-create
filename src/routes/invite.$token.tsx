@@ -10,8 +10,8 @@ export const Route = createFileRoute("/invite/$token")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Team invite — Orbital Connect" },
-      { name: "description", content: "You've been invited to join a team on Orbital Connect." },
+      { title: "Team invite — Connect Orbital" },
+      { name: "description", content: "You've been invited to join a team on Connect Orbital." },
     ],
   }),
   component: InvitePage,
@@ -85,7 +85,7 @@ function InvitePage() {
           <div className="w-10 h-10 rounded-xl bg-brand text-brand-foreground grid place-items-center">
             <Video className="w-5 h-5" />
           </div>
-          <span className="font-semibold text-xl">Orbital Connect</span>
+          <span className="font-semibold text-xl">Connect Orbital</span>
         </Link>
 
         <Card className="p-8 text-center">

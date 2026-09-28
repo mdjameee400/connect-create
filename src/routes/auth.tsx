@@ -24,8 +24,8 @@ export const Route = createFileRoute("/auth")({
   },
   head: () => ({
     meta: [
-      { title: "Sign in — Orbital Connect" },
-      { name: "description", content: "Sign in to Orbital Connect to record, share, and meet." },
+      { title: "Sign in — Connect Orbital" },
+      { name: "description", content: "Sign in to Connect Orbital to record, share, and meet." },
     ],
   }),
   component: AuthPage,
@@ -46,7 +46,9 @@ function AuthPage() {
   // Redirect if already logged in, or after OAuth callback lands back on /auth
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) goDest();
+      if (data?.session) goDest();
+    }).catch(() => {
+      // Ignore initial session refresh failures
     });
 
     // Fires when OAuth provider redirects back with tokens in the URL hash
@@ -85,7 +87,7 @@ function AuthPage() {
 
         // When email confirmation is disabled Supabase returns a session immediately.
         if (data.session) {
-          toast.success("Account created — welcome to Orbital Connect!");
+          toast.success("Account created — welcome to Connect Orbital!");
           goDest();
         } else {
           // Email confirmation is enabled — show a friendly holding screen.
@@ -152,7 +154,7 @@ function AuthPage() {
       <div className="w-full max-w-md">
         <Link to="/" className="mb-8 flex items-center justify-center gap-2">
           <Logo size={40} />
-          <span className="font-semibold text-xl">Orbital Connect</span>
+          <span className="font-semibold text-xl">Connect Orbital</span>
         </Link>
 
         <Card className="p-8">
@@ -231,7 +233,7 @@ function AuthPage() {
           </form>
 
           <p className="text-sm text-muted-foreground text-center mt-6">
-            {mode === "signin" ? "New to Orbital Connect?" : "Already have an account?"}{" "}
+            {mode === "signin" ? "New to Connect Orbital?" : "Already have an account?"}{" "}
             <button
               type="button"
               onClick={() => setMode(mode === "signin" ? "signup" : "signin")}

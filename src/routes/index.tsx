@@ -29,13 +29,13 @@ export const Route = createFileRoute("/")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Orbital Connect — Record. Share. Meet." },
+      { title: "Connect Orbital — Record. Share. Meet." },
       {
         name: "description",
         content:
           "One black-and-white workspace for screen recordings, instant share links, and private live meetings with your team.",
       },
-      { property: "og:title", content: "Orbital Connect — Record. Share. Meet." },
+      { property: "og:title", content: "Connect Orbital — Record. Share. Meet." },
       {
         property: "og:description",
         content:
@@ -69,7 +69,7 @@ function LandingPage() {
         <div className="mx-auto max-w-6xl h-16 px-5 flex items-center gap-3">
           <Link to="/" className="flex items-center gap-2">
             <Logo size={26} />
-            <span className="font-semibold tracking-tight">Orbital Connect</span>
+            <span className="font-semibold tracking-tight">Connect Orbital</span>
           </Link>
           <nav className="hidden md:flex items-center gap-7 ml-8 text-sm text-muted-foreground">
             <SmoothLink href="#features" className="hover:text-foreground transition-colors">Features</SmoothLink>
@@ -136,7 +136,7 @@ function LandingPage() {
                 <span className="w-2.5 h-2.5 rounded-full bg-border" />
                 <span className="w-2.5 h-2.5 rounded-full bg-border" />
                 <span className="mx-auto text-[11px] text-muted-foreground">
-                  orbital.connect / dashboard
+                  connect.orbital / dashboard
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-[190px_1fr]">
@@ -448,10 +448,10 @@ function LandingPage() {
         <div className="mx-auto max-w-6xl px-5 py-10 flex flex-col sm:flex-row items-center gap-4">
           <Link to="/" className="flex items-center gap-2">
             <Logo size={22} />
-            <span className="text-sm font-semibold tracking-tight">Orbital Connect</span>
+            <span className="text-sm font-semibold tracking-tight">Connect Orbital</span>
           </Link>
           <p className="text-xs text-muted-foreground sm:ml-auto">
-            © {new Date().getFullYear()} Orbital Connect. Record, share, meet.
+            © {new Date().getFullYear()} Connect Orbital. Record, share, meet.
           </p>
         </div>
       </footer>

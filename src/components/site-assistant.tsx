@@ -8,7 +8,7 @@ type Msg = { role: "user" | "assistant"; content: string };
 const GREETING: Msg = {
   role: "assistant",
   content:
-    "Hi! I'm the Orbital Connect assistant. Ask me about recording, meetings, your library, teams or billing.",
+    "Hi! I'm the Connect Orbital assistant. Ask me about recording, meetings, your library, teams or billing.",
 };
 
 const SUGGESTIONS = [
@@ -125,7 +125,7 @@ export function SiteAssistant() {
                   void ask(text);
                 }
               }}
-              placeholder="Ask about Orbital Connect"
+              placeholder="Ask about Connect Orbital"
               aria-label="Ask the assistant"
             />
             <Button size="icon" onClick={() => void ask(text)} disabled={busy || !text.trim()} aria-label="Send">

@@ -103,7 +103,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-5 py-5 flex items-center gap-2.5 border-b">
           <Logo size={36} />
           <div className="leading-tight">
-            <div className="font-semibold text-[15px]">Orbital Connect</div>
+            <div className="font-semibold text-[15px]">Connect Orbital</div>
             <div className="text-[11px] text-muted-foreground">Productivity Hub</div>
           </div>
         </div>
@@ -166,7 +166,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <DropdownMenuContent align="start" className="w-56 mt-2">
                 <DropdownMenuLabel className="flex items-center gap-2">
                   <Logo size={20} />
-                  <span>Orbital Connect</span>
+                  <span>Connect Orbital</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>

@@ -12,9 +12,9 @@ export const Route = createFileRoute("/m/$slug")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Private meeting — Orbital Connect" },
-      { name: "description", content: "Private workspace meetings on Orbital Connect." },
-      { property: "og:title", content: "Private meeting — Orbital Connect" },
+      { title: "Private meeting — Connect Orbital" },
+      { name: "description", content: "Private workspace meetings on Connect Orbital." },
+      { property: "og:title", content: "Private meeting — Connect Orbital" },
       { property: "og:description", content: "This meeting is only open to workspace members." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -40,7 +40,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <header className="h-16 border-b flex items-center px-6">
         <Link to="/" className="flex items-center gap-2">
           <Logo size={28} />
-          <span className="font-semibold tracking-tight">Orbital Connect</span>
+          <span className="font-semibold tracking-tight">Connect Orbital</span>
         </Link>
       </header>
       <main className="flex-1 grid place-items-center px-4 py-10">{children}</main>
@@ -180,7 +180,7 @@ function MeetingPage() {
       <header className="h-16 border-b flex items-center px-6">
         <Link to="/" className="flex items-center gap-2">
           <Logo size={28} />
-          <span className="font-semibold tracking-tight">Orbital Connect</span>
+          <span className="font-semibold tracking-tight">Connect Orbital</span>
         </Link>
         <div className="ml-auto">
           <Button size="sm" variant="outline" className="gap-1.5" onClick={copy}>

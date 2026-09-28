@@ -29,19 +29,30 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 
 
 function createSupabaseClient() {
+  // Purge any stale tokens from old/deleted Supabase project to prevent net::ERR_NAME_NOT_RESOLVED
+  if (typeof window !== 'undefined') {
+    try {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.includes('zmocpzupgwlqsvgcevks')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch {
+      // Ignore localStorage access errors
+    }
+  }
+
   // Use import.meta.env for client-side (Vite build-time replacement)
   // Fall back to process.env for SSR (server-side rendering)
-  const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
+  let SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  let SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_PUBLISHABLE_KEY;
 
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    const missing = [
-      ...(!SUPABASE_URL ? ['SUPABASE_URL'] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY ? ['SUPABASE_PUBLISHABLE_KEY'] : []),
-    ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(', ')}. Connect Supabase in Lovable Cloud.`;
-    console.error(`[Supabase] ${message}`);
-    throw new Error(message);
+  // Fallback to active project if environment variables are missing or point to the deleted project
+  if (!SUPABASE_URL || SUPABASE_URL.includes('zmocpzupgwlqsvgcevks')) {
+    SUPABASE_URL = 'https://khklujurxaobiphphhne.supabase.co';
+  }
+  if (!SUPABASE_PUBLISHABLE_KEY || SUPABASE_PUBLISHABLE_KEY.includes('zmocpzupgwlqsvgcevks')) {
+    SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtoa2x1anVyeGFvYmlwaHBoaG5lIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyMTQ0MDYsImV4cCI6MjA5OTc5MDQwNn0.ziD8YK-lJ5wPN2_MtFOH5EtvAKWebgWPHGOKAIudYhU';
   }
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {

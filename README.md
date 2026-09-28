@@ -2,13 +2,13 @@
 
 Product Requirement Document (PRD)
 
-Project: "Orbital Connect" – Integrated Async Recording & Sync Video Calling
+Project: "Connect Orbital" – Integrated Async Recording & Sync Video Calling
 
 1. Executive Summary
 
 Modern work communication is fractured. Teams constantly jump between synchronous tools (Zoom, Google Meet) for live discussions and asynchronous tools (Loom, Vidyard) to share quick updates.
 
-Orbital Connect bridges this gap by merging both communication styles into a single, seamless desktop application. It empowers users to choose the most efficient communication path instantly: record a quick 2-minute walkthrough or launch a live team sync, all from one unified dashboard.
+Connect Orbital bridges this gap by merging both communication styles into a single, seamless desktop application. It empowers users to choose the most efficient communication path instantly: record a quick 2-minute walkthrough or launch a live team sync, all from one unified dashboard.
 
 2. Target Audience & User Personas
 
