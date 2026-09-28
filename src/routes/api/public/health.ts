@@ -24,11 +24,8 @@ async function ping() {
   });
 
   const started = Date.now();
-  // Lightweight keep-alive read: counts only, returns no rows and no user data.
-  const { error } = await supabase
-    .from("meetings")
-    .select("id", { count: "exact", head: true })
-    .limit(1);
+  // Lightweight keep-alive read: returns only the server time, no user data.
+  const { error } = await supabase.rpc("health_ping");
 
   if (error) {
     return Response.json(
