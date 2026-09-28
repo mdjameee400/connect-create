@@ -577,6 +577,7 @@ export type Database = {
         Args: { _meeting_id: string; _user_id: string }
         Returns: boolean
       }
+      health_ping: { Args: never; Returns: string }
       is_team_member: {
         Args: { _team_id: string; _user_id: string }
         Returns: boolean
