@@ -35,20 +35,25 @@ export function MeetingPolls({ meetingId }: { meetingId: string }) {
   const [options, setOptions] = useState(["", ""]);
 
   const load = useCallback(async () => {
-    const [{ data: p }, { data: v }] = await Promise.all([
-      supabase
-        .from("meeting_polls")
-        .select("id, question, options, closed, created_by, created_at")
-        .eq("meeting_id", meetingId)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("meeting_poll_votes")
-        .select("poll_id, voter_id, option_index")
-        .eq("meeting_id", meetingId),
-    ]);
-    setPolls((p ?? []) as Poll[]);
-    setVotes((v ?? []) as Vote[]);
-    setLoading(false);
+    try {
+      const [{ data: p }, { data: v }] = await Promise.all([
+        supabase
+          .from("meeting_polls")
+          .select("id, question, options, closed, created_by, created_at")
+          .eq("meeting_id", meetingId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("meeting_poll_votes")
+          .select("poll_id, voter_id, option_index")
+          .eq("meeting_id", meetingId),
+      ]);
+      setPolls((p ?? []) as Poll[]);
+      setVotes((v ?? []) as Vote[]);
+    } catch (err) {
+      console.warn("[Polls] Polls query skipped:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [meetingId]);
 
   useEffect(() => {
@@ -238,19 +243,23 @@ export function MeetingQA({
   const [text, setText] = useState("");
 
   const load = useCallback(async () => {
-    const [{ data: q }, { data: v }] = await Promise.all([
-      supabase
-        .from("meeting_questions")
-        .select("id, body, author_id, author_name, answered, created_at")
-        .eq("meeting_id", meetingId)
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("meeting_question_votes")
-        .select("question_id, voter_id")
-        .eq("meeting_id", meetingId),
-    ]);
-    setQuestions((q ?? []) as Question[]);
-    setVotes(v ?? []);
+    try {
+      const [{ data: q }, { data: v }] = await Promise.all([
+        supabase
+          .from("meeting_questions")
+          .select("id, body, author_id, author_name, answered, created_at")
+          .eq("meeting_id", meetingId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("meeting_question_votes")
+          .select("question_id, voter_id")
+          .eq("meeting_id", meetingId),
+      ]);
+      setQuestions((q ?? []) as Question[]);
+      setVotes(v ?? []);
+    } catch (err) {
+      console.warn("[QA] Questions query skipped:", err);
+    }
   }, [meetingId]);
 
   useEffect(() => {

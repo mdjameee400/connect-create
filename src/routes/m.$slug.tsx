@@ -48,6 +48,22 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function slugToUuid(slug: string): string {
+  let hash1 = 0;
+  let hash2 = 0;
+  for (let i = 0; i < slug.length; i++) {
+    const ch = slug.charCodeAt(i);
+    hash1 = ((hash1 << 5) - hash1) + ch;
+    hash1 |= 0;
+    hash2 = ((hash2 << 7) - hash2) + ch;
+    hash2 |= 0;
+  }
+  const hex1 = Math.abs(hash1).toString(16).padStart(8, "0");
+  const hex2 = Math.abs(hash2).toString(16).padStart(8, "0");
+  const combined = (hex1 + hex2 + hex1 + hex2).slice(0, 32);
+  return `${combined.slice(0, 8)}-${combined.slice(8, 12)}-4${combined.slice(13, 16)}-a${combined.slice(17, 20)}-${combined.slice(20, 32)}`;
+}
+
 function MeetingPage() {
   const { slug } = Route.useParams();
   const navigate = useNavigate();
@@ -121,7 +137,7 @@ function MeetingPage() {
       } else {
         // Quick call or direct join link fallback
         setMeeting({
-          id: slug,
+          id: slugToUuid(slug),
           title: "Quick call",
           starts_at: new Date().toISOString(),
           duration_minutes: 30,

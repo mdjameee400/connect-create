@@ -175,17 +175,21 @@ export function MeetingWhiteboard({
     let active = true;
 
     (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (u.user?.id) meRef.current = u.user.id;
-      const { data } = await supabase
-        .from("meeting_board_strokes")
-        .select("stroke")
-        .eq("meeting_id", meetingId)
-        .order("created_at", { ascending: true })
-        .limit(2000);
-      if (!active) return;
-      strokesRef.current = (data ?? []).map((r) => r.stroke as unknown as Stroke);
-      redraw();
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        if (u.user?.id) meRef.current = u.user.id;
+        const { data } = await supabase
+          .from("meeting_board_strokes")
+          .select("stroke")
+          .eq("meeting_id", meetingId)
+          .order("created_at", { ascending: true })
+          .limit(2000);
+        if (!active) return;
+        strokesRef.current = (data ?? []).map((r) => r.stroke as unknown as Stroke);
+        redraw();
+      } catch (err) {
+        console.warn("[Whiteboard] Strokes query skipped:", err);
+      }
     })();
 
     const channel = supabase
@@ -242,11 +246,15 @@ export function MeetingWhiteboard({
     strokesRef.current.push(stroke);
     redraw();
     channelRef.current?.send({ type: "broadcast", event: "stroke:commit", payload: stroke });
-    await supabase.from("meeting_board_strokes").insert({
-      meeting_id: meetingId,
-      author_id: meRef.current,
-      stroke: JSON.parse(JSON.stringify(stroke)),
-    });
+    try {
+      await supabase.from("meeting_board_strokes").insert({
+        meeting_id: meetingId,
+        author_id: meRef.current,
+        stroke: JSON.parse(JSON.stringify(stroke)),
+      });
+    } catch {
+      // Broadcast already happened over Realtime channel
+    }
   };
 
   const eraseAt = async (p: Point) => {
@@ -256,12 +264,16 @@ export function MeetingWhiteboard({
     strokesRef.current = strokesRef.current.filter((s) => !hitIds.includes(s.id));
     redraw();
     channelRef.current?.send({ type: "broadcast", event: "stroke:remove", payload: { ids: hitIds } });
-    for (const id of hitIds) {
-      await supabase
-        .from("meeting_board_strokes")
-        .delete()
-        .eq("meeting_id", meetingId)
-        .eq("stroke->>id", id);
+    try {
+      for (const id of hitIds) {
+        await supabase
+          .from("meeting_board_strokes")
+          .delete()
+          .eq("meeting_id", meetingId)
+          .eq("stroke->>id", id);
+      }
+    } catch {
+      // ignore
     }
   };
 

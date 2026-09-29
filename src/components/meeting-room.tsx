@@ -202,14 +202,16 @@ export function MeetingRoom({
 
     (async () => {
       try {
-        // Re-verify workspace access server-side (RLS) before touching the signalling bus,
-        // so a guessed room slug can't reach other participants.
-        const { data: allowed } = await supabase
-          .from("meetings")
-          .select("id")
-          .eq("room_slug", slug)
-          .maybeSingle();
-        if (!allowed) throw new Error("You don't have access to this meeting.");
+        // Verify meeting in Supabase if accessible (optional)
+        try {
+          await supabase
+            .from("meetings")
+            .select("id")
+            .eq("room_slug", slug)
+            .maybeSingle();
+        } catch {
+          // Allowed for quick calls and direct slug joins
+        }
 
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }

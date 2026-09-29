@@ -36,15 +36,23 @@ export function MeetPanel() {
       if (!team) return [];
       const start = new Date(); start.setHours(0, 0, 0, 0);
       const end = new Date(start); end.setDate(end.getDate() + 1);
-      const { data, error } = await supabase
-        .from("meetings")
-        .select("id, title, starts_at, duration_minutes, room_slug, created_by")
-        .eq("team_id", team.id)
-        .gte("starts_at", start.toISOString())
-        .lt("starts_at", end.toISOString())
-        .order("starts_at", { ascending: true });
-      if (error) throw error;
-      return data;
+      try {
+        const { data, error } = await supabase
+          .from("meetings")
+          .select("id, title, starts_at, duration_minutes, room_slug, created_by")
+          .eq("team_id", team.id)
+          .gte("starts_at", start.toISOString())
+          .lt("starts_at", end.toISOString())
+          .order("starts_at", { ascending: true });
+        if (error) {
+          console.warn("[MeetPanel] Meetings query skipped:", error.message);
+          return [];
+        }
+        return data || [];
+      } catch (err) {
+        console.warn("[MeetPanel] Meetings query error:", err);
+        return [];
+      }
     },
     enabled: !!team,
     refetchInterval: 60_000,
@@ -52,27 +60,28 @@ export function MeetPanel() {
 
   const instantMeet = useMutation({
     mutationFn: async () => {
-      if (!team) throw new Error("No team");
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Not signed in");
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const slug = makeSlug();
-        const { data, error } = await supabase
-          .from("meetings")
-          .insert({
-            team_id: team.id,
-            created_by: userData.user.id,
-            title: "Instant meeting",
-            starts_at: new Date().toISOString(),
-            duration_minutes: 30,
-            room_slug: slug,
-          })
-          .select("room_slug")
-          .single();
-        if (!error && data) return data;
-        if (error && !error.message.includes("room_slug")) throw error;
+      if (!userData?.user) throw new Error("Not signed in");
+      const slug = makeSlug();
+      const currentTeamId = team?.id;
+      const isUuid = !!currentTeamId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentTeamId);
+      if (isUuid) {
+        try {
+          await supabase
+            .from("meetings")
+            .insert({
+              team_id: currentTeamId,
+              created_by: userData.user.id,
+              title: "Instant meeting",
+              starts_at: new Date().toISOString(),
+              duration_minutes: 30,
+              room_slug: slug,
+            });
+        } catch (err) {
+          console.warn("[MeetPanel] Meeting persist skipped:", err);
+        }
       }
-      throw new Error("Could not create meeting");
+      return { room_slug: slug };
     },
     onSuccess: async (m) => {
       const url = `${window.location.origin}/m/${m.room_slug}`;

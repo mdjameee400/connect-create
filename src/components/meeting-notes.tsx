@@ -25,16 +25,21 @@ export function MeetingNotes({
   useEffect(() => {
     let active = true;
     (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (u.user?.id) meRef.current = u.user.id;
-      const { data } = await supabase
-        .from("meeting_notes")
-        .select("body")
-        .eq("meeting_id", meetingId)
-        .maybeSingle();
-      if (!active) return;
-      setBody(data?.body ?? "");
-      setLoading(false);
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        if (u.user?.id) meRef.current = u.user.id;
+        const { data } = await supabase
+          .from("meeting_notes")
+          .select("body")
+          .eq("meeting_id", meetingId)
+          .maybeSingle();
+        if (!active) return;
+        setBody(data?.body ?? "");
+      } catch (err) {
+        console.warn("[Notes] Remote notes query skipped:", err);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
 
     const channel = supabase
@@ -57,13 +62,18 @@ export function MeetingNotes({
       if (saveTimer.current) clearTimeout(saveTimer.current);
       setSaving(true);
       saveTimer.current = setTimeout(async () => {
-        await supabase
-          .from("meeting_notes")
-          .upsert(
-            { meeting_id: meetingId, body: next, updated_by: meRef.current, updated_at: new Date().toISOString() },
-            { onConflict: "meeting_id" },
-          );
-        setSaving(false);
+        try {
+          await supabase
+            .from("meeting_notes")
+            .upsert(
+              { meeting_id: meetingId, body: next, updated_by: meRef.current, updated_at: new Date().toISOString() },
+              { onConflict: "meeting_id" },
+            );
+        } catch {
+          // ignore
+        } finally {
+          setSaving(false);
+        }
       }, 600);
     },
     [meetingId],

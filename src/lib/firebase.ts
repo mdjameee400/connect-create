@@ -132,11 +132,27 @@ function deriveSupabasePassword(uid: string): string {
  *
  * Fire-and-forget — never blocks or throws so the auth flow is not disrupted.
  */
+const syncedUsers = new Set<string>();
+
 export async function syncFirebaseUserToSupabase(
   user: User,
   idToken?: string,
   plainPassword?: string,
 ) {
+  // If already attempted in this browser session without new credentials, skip to avoid repeated 400s
+  if (!idToken && !plainPassword && syncedUsers.has(user.uid)) {
+    return;
+  }
+  syncedUsers.add(user.uid);
+
+  // Check if Supabase already has a valid session
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data?.session) return;
+  } catch {
+    // continue
+  }
+
   // Fast path: ID-token exchange
   if (idToken) {
     try {
@@ -145,7 +161,6 @@ export async function syncFirebaseUserToSupabase(
         token: idToken,
       });
       if (!error) return; // success
-      console.warn("[Auth Sync] signInWithIdToken failed, trying shadow user:", error.message);
     } catch {
       // ignore
     }

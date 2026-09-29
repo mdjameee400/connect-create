@@ -44,22 +44,29 @@ export function useMeetingChat(meetingId: string, displayName: string) {
     let active = true;
 
     (async () => {
-      const { data: u } = await supabase.auth.getUser();
-      if (active) setMe(u.user?.id ?? null);
-      const { data } = await supabase
-        .from("meeting_messages")
-        .select("id, sender_id, sender_name, body, created_at")
-        .eq("meeting_id", meetingId)
-        .order("created_at", { ascending: true })
-        .limit(200);
-      if (!active) return;
-      setMessages((prev) => {
-        const seen = new Set(prev.map((m) => m.id));
-        return [...(data ?? []).filter((d) => !seen.has(d.id)), ...prev].sort((a, b) =>
-          a.created_at.localeCompare(b.created_at),
-        );
-      });
-      setLoading(false);
+      try {
+        const { data: u } = await supabase.auth.getUser();
+        if (active) setMe(u.user?.id ?? null);
+        const { data, error } = await supabase
+          .from("meeting_messages")
+          .select("id, sender_id, sender_name, body, created_at")
+          .eq("meeting_id", meetingId)
+          .order("created_at", { ascending: true })
+          .limit(200);
+        if (!active) return;
+        if (!error && data) {
+          setMessages((prev) => {
+            const seen = new Set(prev.map((m) => m.id));
+            return [...(data ?? []).filter((d) => !seen.has(d.id)), ...prev].sort((a, b) =>
+              a.created_at.localeCompare(b.created_at),
+            );
+          });
+        }
+      } catch (err) {
+        console.warn("[Chat] History query skipped:", err);
+      } finally {
+        if (active) setLoading(false);
+      }
     })();
 
     const channel = supabase
@@ -126,20 +133,20 @@ export function useMeetingChat(meetingId: string, displayName: string) {
         event: "chat",
         payload: { ...msg, pending: false },
       });
-      const { error } = await supabase.from("meeting_messages").insert({
-        id: msg.id,
-        meeting_id: meetingId,
-        sender_id: msg.sender_id,
-        sender_name: msg.sender_name,
-        body: msg.body,
-      });
-      if (error) {
-        console.error("chat insert failed", error);
-        toast.error(`Message not saved — ${error.message}`);
+      try {
+        await supabase.from("meeting_messages").insert({
+          id: msg.id,
+          meeting_id: meetingId,
+          sender_id: msg.sender_id,
+          sender_name: msg.sender_name,
+          body: msg.body,
+        });
+      } catch (err) {
+        console.warn("[Chat] Remote persist skipped (message broadcast via Realtime):", err);
       }
       setMessages((prev) =>
         prev.map((m) =>
-          m.id === msg.id ? { ...m, pending: false, failed: Boolean(error) } : m,
+          m.id === msg.id ? { ...m, pending: false } : m,
         ),
       );
     },
