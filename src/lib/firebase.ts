@@ -75,8 +75,8 @@ export function getFirebaseErrorMessage(error: unknown): string {
       return "Too many failed attempts. Please try again later.";
     case "auth/network-request-failed":
       return "Network error. Please check your internet connection.";
-    case "auth/requires-recent-login":
-      return "Please sign in again to continue.";
+    case "auth/unauthorized-domain":
+      return "This domain is not authorized in Firebase Console. Add your current website domain to Firebase Console -> Authentication -> Settings -> Authorized domains.";
     default:
       return message || "Authentication failed. Please try again.";
   }
