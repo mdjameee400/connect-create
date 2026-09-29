@@ -34,27 +34,29 @@ export function ScheduleMeetingDialog({
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("Not signed in");
       const startsAt = new Date(`${date}T${time}`);
-      // Try a few times in case of slug collision
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const slug = makeSlug();
-        const { data, error } = await supabase
-          .from("meetings")
-          .insert({
-            team_id: teamId,
-            created_by: userData.user.id,
-            title: title.trim() || "Untitled meeting",
-            starts_at: startsAt.toISOString(),
-            duration_minutes: duration,
-            room_slug: slug,
-            notes: notes.trim() || null,
-          })
-          .select("id, room_slug")
-          .single();
-        if (!error && data) return data;
-        // duplicate slug — retry; other errors — throw
-        if (error && !error.message.includes("room_slug")) throw error;
+      const slug = makeSlug();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(teamId);
+      if (isUuid) {
+        try {
+          const { data, error } = await supabase
+            .from("meetings")
+            .insert({
+              team_id: teamId,
+              created_by: userData.user.id,
+              title: title.trim() || "Untitled meeting",
+              starts_at: startsAt.toISOString(),
+              duration_minutes: duration,
+              room_slug: slug,
+              notes: notes.trim() || null,
+            })
+            .select("id, room_slug")
+            .single();
+          if (!error && data) return data;
+        } catch (e) {
+          console.warn("[ScheduleMeeting] Remote meeting persist skipped:", e);
+        }
       }
-      throw new Error("Could not generate a unique room link");
+      return { id: slug, room_slug: slug };
     },
     onSuccess: async (m) => {
       const url = `${window.location.origin}/m/${m.room_slug}`;

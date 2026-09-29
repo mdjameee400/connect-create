@@ -28,16 +28,29 @@ export type CurrentTeam = {
 export async function fetchCurrentTeam(): Promise<CurrentTeam | null> {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return null;
-  const { data, error } = await supabase
-    .from("team_members")
-    .select("role, joined_at, teams!inner(id, name, owner_id)")
-    .eq("user_id", userData.user.id)
-    .order("joined_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error || !data) return null;
-  const t = data.teams as unknown as { id: string; name: string; owner_id: string };
-  return { id: t.id, name: t.name, owner_id: t.owner_id, role: data.role as "owner" | "member" };
+  try {
+    const { data, error } = await supabase
+      .from("team_members")
+      .select("role, joined_at, teams!inner(id, name, owner_id)")
+      .eq("user_id", userData.user.id)
+      .order("joined_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!error && data?.teams) {
+      const t = data.teams as unknown as { id: string; name: string; owner_id: string };
+      return { id: t.id, name: t.name, owner_id: t.owner_id, role: data.role as "owner" | "member" };
+    }
+  } catch (e) {
+    console.warn("[Team] Remote fetch error, falling back to personal workspace:", e);
+  }
+
+  // Fallback to personal workspace so Quick Call and team operations always work
+  return {
+    id: userData.user.id,
+    name: "Personal Workspace",
+    owner_id: userData.user.id,
+    role: "owner",
+  };
 }
 
 export function useCurrentTeam() {
@@ -98,12 +111,16 @@ export function initials(name: string | null | undefined): string {
 
 // Bump last_seen_at for presence
 export async function pingPresence() {
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return;
-  await supabase
-    .from("profiles")
-    .update({ last_seen_at: new Date().toISOString() })
-    .eq("id", userData.user.id);
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    await supabase
+      .from("profiles")
+      .update({ last_seen_at: new Date().toISOString() })
+      .eq("id", userData.user.id);
+  } catch {
+    // Ignore presence errors when offline or unauthenticated in Supabase
+  }
 }
 
 // Generate an 8-char url-safe slug

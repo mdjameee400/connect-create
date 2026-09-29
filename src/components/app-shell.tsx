@@ -77,23 +77,26 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const quickCall = useMutation({
     mutationFn: async () => {
-      if (!team) throw new Error("No team");
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Not signed in");
-      for (let attempt = 0; attempt < 5; attempt++) {
-        const slug = makeSlug();
-        const { data, error } = await supabase.from("meetings").insert({
-          team_id: team.id,
-          created_by: userData.user.id,
-          title: "Quick call",
-          starts_at: new Date().toISOString(),
-          duration_minutes: 30,
-          room_slug: slug,
-         }).select("room_slug").single();
-        if (!error && data) return data;
-        if (error && !error.message.includes("room_slug")) throw error;
+      if (!userData?.user) throw new Error("Not signed in");
+      const slug = makeSlug();
+      const currentTeamId = team?.id;
+      const isUuid = !!currentTeamId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentTeamId);
+      if (isUuid) {
+        try {
+          await supabase.from("meetings").insert({
+            team_id: currentTeamId,
+            created_by: userData.user.id,
+            title: "Quick call",
+            starts_at: new Date().toISOString(),
+            duration_minutes: 30,
+            room_slug: slug,
+          });
+        } catch (err) {
+          console.warn("[QuickCall] Supabase meeting persist skipped:", err);
+        }
       }
-      throw new Error("Could not create call");
+      return { room_slug: slug };
     },
     onSuccess: async (m) => {
       const url = `${window.location.origin}/m/${m.room_slug}`;

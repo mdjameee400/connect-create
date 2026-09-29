@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
@@ -112,28 +114,126 @@ export function firebaseUidToUuid(uid: string): string {
 }
 
 /**
- * Sign in with Google via Firebase Popup.
- * Also retrieves the Google ID Token and transparently signs into Supabase
- * so database tables, RLS policies, and storage continue to work seamlessly.
+ * Generate a deterministic, high-entropy password for the shadow Supabase
+ * user so we never need to prompt or store it.
  */
-export async function signInWithGoogle(): Promise<User> {
-  const result = await signInWithPopup(auth, googleProvider);
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  const idToken = credential?.idToken;
+function deriveSupabasePassword(uid: string): string {
+  // Use the UID + a static salt to produce something long enough for Supabase's 6-char min
+  return `fb_sync_${uid}_x9K$mPz`;
+}
 
-  // Sync to Supabase if ID token is present
+/**
+ * Try syncing the Firebase Google user to a real Supabase session.
+ *
+ * 1. Try `signInWithIdToken` (fast path — works when Supabase Google provider
+ *    is configured with the matching Firebase/Google client ID).
+ * 2. If that fails (400 / misconfigured), fall back to a deterministic
+ *    email+password "shadow user" in Supabase so RLS policies still work.
+ *
+ * Fire-and-forget — never blocks or throws so the auth flow is not disrupted.
+ */
+export async function syncFirebaseUserToSupabase(
+  user: User,
+  idToken?: string,
+  plainPassword?: string,
+) {
+  // Fast path: ID-token exchange
   if (idToken) {
     try {
-      await supabase.auth.signInWithIdToken({
+      const { error } = await supabase.auth.signInWithIdToken({
         provider: "google",
         token: idToken,
       });
-    } catch (e) {
-      console.warn("[Auth Sync] Supabase ID token sync skipped/failed:", e);
+      if (!error) return; // success
+      console.warn("[Auth Sync] signInWithIdToken failed, trying shadow user:", error.message);
+    } catch {
+      // ignore
     }
   }
 
-  return result.user;
+  // Fallback: shadow email+password user
+  const email = user.email;
+  if (!email) return;
+
+  const derivedPassword = deriveSupabasePassword(user.uid);
+  const passwordsToTry = plainPassword ? [plainPassword, derivedPassword] : [derivedPassword];
+
+  for (const pw of passwordsToTry) {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: pw,
+      });
+      if (!error && data?.session) return;
+    } catch {
+      // try next
+    }
+  }
+
+  // User doesn't exist yet — sign up
+  try {
+    const meta = {
+      full_name: user.displayName,
+      avatar_url: user.photoURL,
+    };
+    await supabase.auth.signUp({
+      email,
+      password: plainPassword || derivedPassword,
+      options: {
+        data: meta,
+        emailRedirectTo: undefined,
+      },
+    });
+  } catch (signupErr) {
+    console.warn("[Auth Sync] Shadow user creation skipped:", signupErr);
+  }
+}
+
+/**
+ * Handle the result of a redirect-based Google sign-in.
+ * Call once on app init so redirect results are captured.
+ */
+export async function handleGoogleRedirectResult(): Promise<User | null> {
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      syncFirebaseUserToSupabase(result.user, credential?.idToken).catch(() => {});
+      return result.user;
+    }
+  } catch (e) {
+    console.warn("[Auth] Redirect result error (may be stale):", e);
+  }
+  return null;
+}
+
+/**
+ * Sign in with Google via Firebase Popup, falling back to redirect
+ * if the popup is blocked by Cross-Origin-Opener-Policy or browser settings.
+ */
+export async function signInWithGoogle(): Promise<User> {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    syncFirebaseUserToSupabase(result.user, credential?.idToken).catch(() => {});
+    return result.user;
+  } catch (err: unknown) {
+    const code = (err as { code?: string }).code;
+    // If the popup was blocked or closed by COOP, fall back to redirect
+    if (
+      code === "auth/popup-blocked" ||
+      code === "auth/popup-closed-by-user" ||
+      code === "auth/cancelled-popup-request" ||
+      code === "auth/internal-error"
+    ) {
+      // signInWithRedirect navigates away; it never resolves a user here.
+      // The redirect result is picked up by handleGoogleRedirectResult on reload.
+      await signInWithRedirect(auth, googleProvider);
+      // This line is unreachable after redirect, but TypeScript needs a return
+      throw new Error("Redirecting to Google sign-in…");
+    }
+    throw err;
+  }
 }
 
 /**
@@ -160,15 +260,7 @@ export async function registerWithEmail(
   }
 
   // Attempt to sync user to Supabase
-  try {
-    await supabase.auth.signUp({
-      email,
-      password: pass,
-      options: { data: { full_name: name } },
-    });
-  } catch (e) {
-    console.warn("[Auth Sync] Supabase signup sync skipped/failed:", e);
-  }
+  syncFirebaseUserToSupabase(cred.user, undefined, pass).catch(() => {});
 
   return { user: cred.user, verificationSent };
 }
@@ -180,11 +272,7 @@ export async function loginWithEmail(email: string, pass: string): Promise<User>
   const cred = await signInWithEmailAndPassword(auth, email, pass);
 
   // Attempt to sync session with Supabase
-  try {
-    await supabase.auth.signInWithPassword({ email, password: pass });
-  } catch (e) {
-    console.warn("[Auth Sync] Supabase login sync skipped/failed:", e);
-  }
+  syncFirebaseUserToSupabase(cred.user, undefined, pass).catch(() => {});
 
   return cred.user;
 }
@@ -224,5 +312,10 @@ export function getCurrentUser(): Promise<User | null> {
  * Listen to Firebase Auth state changes.
  */
 export function onAuthUserChanged(callback: (user: User | null) => void) {
-  return onAuthStateChanged(auth, callback);
+  return onAuthStateChanged(auth, (user) => {
+    if (user) {
+      syncFirebaseUserToSupabase(user).catch(() => {});
+    }
+    callback(user);
+  });
 }

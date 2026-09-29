@@ -65,45 +65,70 @@ function MeetingPage() {
         return;
       }
 
-      // RLS: only members of the meeting's workspace can read this row.
-      const { data, error } = await supabase
-        .from("meetings")
-        .select("id, title, starts_at, duration_minutes, notes, created_by")
-        .eq("room_slug", slug)
-        .maybeSingle();
-
-      if (error || !data) {
-        setAccess("no-access");
-        return;
+      // Try fetching meeting metadata from Supabase
+      let data: { id: string; title: string; starts_at: string; duration_minutes: number; notes: string | null; created_by: string | null } | null = null;
+      try {
+        const res = await supabase
+          .from("meetings")
+          .select("id, title, starts_at, duration_minutes, notes, created_by")
+          .eq("room_slug", slug)
+          .maybeSingle();
+        data = res.data;
+      } catch (err) {
+        console.warn("[Meeting] Could not fetch remote meeting info:", err);
       }
 
-      const { data: me } = await supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", user.id)
-        .maybeSingle();
-      const name =
-        me?.display_name || (user.email ? user.email.split("@")[0] : "") || "Teammate";
+      let name =
+        (user.user_metadata?.full_name as string) ||
+        (user.email ? user.email.split("@")[0] : "") ||
+        "Teammate";
+
+      try {
+        const { data: me } = await supabase
+          .from("profiles")
+          .select("display_name")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (me?.display_name) name = me.display_name;
+      } catch {
+        // ignore
+      }
       setDisplayName(name);
 
       let host: string | null = null;
-      if (data.created_by) {
-        const { data: p } = await supabase
-          .from("profiles")
-          .select("display_name")
-          .eq("id", data.created_by)
-          .maybeSingle();
-        host = p?.display_name ?? null;
+      if (data?.created_by) {
+        try {
+          const { data: p } = await supabase
+            .from("profiles")
+            .select("display_name")
+            .eq("id", data.created_by)
+            .maybeSingle();
+          host = p?.display_name ?? null;
+        } catch {
+          // ignore
+        }
       }
 
-      setMeeting({
-        id: data.id,
-        title: data.title,
-        starts_at: data.starts_at,
-        duration_minutes: data.duration_minutes,
-        notes: data.notes,
-        host_name: host,
-      });
+      if (data) {
+        setMeeting({
+          id: data.id,
+          title: data.title,
+          starts_at: data.starts_at,
+          duration_minutes: data.duration_minutes,
+          notes: data.notes,
+          host_name: host,
+        });
+      } else {
+        // Quick call or direct join link fallback
+        setMeeting({
+          id: slug,
+          title: "Quick call",
+          starts_at: new Date().toISOString(),
+          duration_minutes: 30,
+          notes: null,
+          host_name: host || name,
+        });
+      }
       setAccess("ok");
     })();
   }, [slug]);

@@ -101,6 +101,10 @@ function AuthPage() {
       toast.success("Signed in with Google!");
       goDest();
     } catch (err) {
+      // If redirecting (popup fallback), the page navigates away — no error needed
+      if (err instanceof Error && err.message.includes("Redirecting")) {
+        return;
+      }
       toast.error(getFirebaseErrorMessage(err), { duration: 8000 });
     } finally {
       setLoading(false);

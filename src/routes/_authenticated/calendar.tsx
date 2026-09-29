@@ -37,15 +37,23 @@ function CalendarPage() {
     queryKey: ["meetings", "range", team?.id, rangeStart.toISOString(), rangeEnd.toISOString()],
     queryFn: async (): Promise<Meeting[]> => {
       if (!team) return [];
-      const { data, error } = await supabase
-        .from("meetings")
-        .select("id, title, starts_at, duration_minutes, room_slug, notes")
-        .eq("team_id", team.id)
-        .gte("starts_at", rangeStart.toISOString())
-        .lt("starts_at", rangeEnd.toISOString())
-        .order("starts_at", { ascending: true });
-      if (error) throw error;
-      return data;
+      try {
+        const { data, error } = await supabase
+          .from("meetings")
+          .select("id, title, starts_at, duration_minutes, room_slug, notes")
+          .eq("team_id", team.id)
+          .gte("starts_at", rangeStart.toISOString())
+          .lt("starts_at", rangeEnd.toISOString())
+          .order("starts_at", { ascending: true });
+        if (error) {
+          console.warn("[Calendar] Meetings query warning:", error.message);
+          return [];
+        }
+        return data || [];
+      } catch (err) {
+        console.warn("[Calendar] Meetings query error:", err);
+        return [];
+      }
     },
     enabled: !!team,
   });

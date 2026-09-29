@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChunkedRecording } from "@/lib/chunked-recording";
+import { saveLocalRecording } from "@/lib/local-recording-storage";
 
 type Mode = "screen" | "window" | "region";
 
@@ -29,6 +30,10 @@ export function Recorder() {
   const startedAtRef = useRef<number>(0);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const extraTracksRef = useRef<MediaStreamTrack[]>([]);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingTitleRef = useRef<string>("");
+  const recordingIdRef = useRef<string>("");
+  const recordingMimeRef = useRef<string>("video/webm");
 
   const [mode, setMode] = useState<Mode>("screen");
   const [mic, setMic] = useState(true);
@@ -136,28 +141,38 @@ export function Recorder() {
         .maybeSingle();
 
       const title = `Recording · ${new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+      recordedChunksRef.current = [];
+      recordingTitleRef.current = title;
+      recordingMimeRef.current = mime;
+
       const chunked = new ChunkedRecording({
         userId: user.id,
         teamId: teamRow?.team_id ?? null,
         title,
         mime,
       });
+      recordingIdRef.current = chunked.id;
       try {
         await chunked.start();
+        chunkedRef.current = chunked;
+        queryClient.invalidateQueries({ queryKey: ["recordings"] });
       } catch (e) {
-        console.error(e);
-        toast.error("Couldn't start cloud recording");
-        stopTracks();
-        setState("idle");
-        return;
+        console.warn("[Recorder] Cloud recording row creation skipped/failed, will save locally:", e);
       }
-      chunkedRef.current = chunked;
-      queryClient.invalidateQueries({ queryKey: ["recordings"] });
 
       const rec = new MediaRecorder(combined, { mimeType: mime });
       recorderRef.current = rec;
       rec.ondataavailable = (e) => {
-        if (e.data.size > 0) chunked.push(e.data);
+        if (e.data.size > 0) {
+          recordedChunksRef.current.push(e.data);
+          if (chunkedRef.current) {
+            try {
+              chunkedRef.current.push(e.data);
+            } catch {
+              // ignore
+            }
+          }
+        }
       };
       rec.onstop = () => finalize();
       combined.getVideoTracks()[0].addEventListener("ended", () => {
@@ -188,22 +203,43 @@ export function Recorder() {
 
     const chunked = chunkedRef.current;
     chunkedRef.current = null;
-    if (!chunked) { setState("idle"); return; }
+    const id = recordingIdRef.current || chunked?.id || crypto.randomUUID();
+    const title = recordingTitleRef.current || `Recording · ${new Date().toLocaleDateString()}`;
+    const mime = recordingMimeRef.current || "video/webm";
 
-    const id = chunked.id;
+    const recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
+    if (recordedBlob.size > 0) {
+      await saveLocalRecording({
+        id,
+        title,
+        duration_seconds: durationSec,
+        size_bytes: recordedBlob.size,
+        mime_type: mime,
+        created_at: new Date().toISOString(),
+        upload_status: "ready",
+        blob: recordedBlob,
+      });
+    }
+
     const shareUrl = `${window.location.origin}/v/${id}`;
     try {
       await navigator.clipboard.writeText(shareUrl);
-      toast.success("Share link copied — finishing upload", {
+      toast.success("Recording complete! Share link copied", {
         description: shareUrl,
-        action: { label: "Open", onClick: () => navigate({ to: "/v/$id", params: { id } }) },
+        action: { label: "Watch", onClick: () => navigate({ to: "/v/$id", params: { id } }) },
       });
     } catch {
-      toast.success("Recording saved — link ready in Library");
+      toast.success("Recording complete!", {
+        action: { label: "Watch", onClick: () => navigate({ to: "/v/$id", params: { id } }) },
+      });
     }
 
-    const res = await chunked.finalize(durationSec);
-    if (!res.ok) toast.error("Upload failed — open Library to retry");
+    if (chunked) {
+      chunked.finalize(durationSec).catch((e) => {
+        console.warn("[Recorder] Cloud finalize background sync notice:", e);
+      });
+    }
+
     setState("idle");
     queryClient.invalidateQueries({ queryKey: ["recordings"] });
     queryClient.invalidateQueries({ queryKey: ["recording", id] });

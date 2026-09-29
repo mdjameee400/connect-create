@@ -8,6 +8,8 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { finalizeInterrupted } from "@/lib/chunked-recording";
 
+import { getLocalRecordings, deleteLocalRecording } from "@/lib/local-recording-storage";
+
 export const Route = createFileRoute("/_authenticated/library")({
   component: Library,
 });
@@ -19,23 +21,59 @@ function Library() {
     queryFn: async () => {
       const { data: userData } = await supabase.auth.getUser();
       const myId = userData.user?.id ?? null;
-      const { data: rows, error } = await supabase.from("recordings")
-        .select("*").order("created_at", { ascending: false });
-      if (error) throw error;
-      const otherIds = Array.from(new Set((rows ?? []).map((r) => r.user_id).filter((id) => id !== myId)));
+      let remoteRows: any[] = [];
+      try {
+        const { data: rows, error } = await supabase.from("recordings")
+          .select("*").order("created_at", { ascending: false });
+        if (!error && rows) remoteRows = rows;
+      } catch (err) {
+        console.warn("[Library] Remote query notice:", err);
+      }
+
+      let localRows: any[] = [];
+      try {
+        localRows = await getLocalRecordings();
+      } catch (err) {
+        console.warn("[Library] Local query notice:", err);
+      }
+
+      const rowMap = new Map<string, any>();
+      localRows.forEach((r) => rowMap.set(r.id, { ...r, is_local: true, user_id: myId }));
+      remoteRows.forEach((r) => rowMap.set(r.id, { ...r, is_local: false }));
+
+      const allRows = Array.from(rowMap.values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      const otherIds = Array.from(new Set(allRows.map((r) => r.user_id).filter((id) => id && id !== myId)));
       let names: Record<string, string> = {};
       if (otherIds.length) {
-        const { data: profiles } = await supabase.from("profiles").select("id, display_name").in("id", otherIds);
-        names = Object.fromEntries((profiles ?? []).map((p) => [p.id, p.display_name ?? "Teammate"]));
+        try {
+          const { data: profiles } = await supabase.from("profiles").select("id, display_name").in("id", otherIds);
+          names = Object.fromEntries((profiles ?? []).map((p) => [p.id, p.display_name ?? "Teammate"]));
+        } catch {
+          // ignore
+        }
       }
-      return { rows: rows ?? [], myId, names };
+      return { rows: allRows, myId, names };
     },
   });
 
   const del = useMutation({
-    mutationFn: async (r: { id: string; storage_path: string }) => {
-      await supabase.storage.from("recordings").remove([r.storage_path]);
-      await supabase.from("recordings").delete().eq("id", r.id);
+    mutationFn: async (r: { id: string; storage_path?: string }) => {
+      await deleteLocalRecording(r.id);
+      if (r.storage_path) {
+        try {
+          await supabase.storage.from("recordings").remove([r.storage_path]);
+        } catch {
+          // ignore
+        }
+      }
+      try {
+        await supabase.from("recordings").delete().eq("id", r.id);
+      } catch {
+        // ignore
+      }
     },
     onSuccess: () => {
       toast.success("Recording deleted");

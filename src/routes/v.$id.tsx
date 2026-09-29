@@ -1,10 +1,11 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Video, Copy, Loader2 } from "lucide-react";
+import { Video, Copy, Loader2, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { getLocalRecording } from "@/lib/local-recording-storage";
 
 export const Route = createFileRoute("/v/$id")({
   ssr: false,
@@ -29,21 +30,63 @@ function SharePage() {
 
   useEffect(() => {
     (async () => {
-      const { data, error } = await supabase.from("recordings")
-        .select("id, title, storage_path, duration_seconds, created_at, upload_status, is_public")
-        .eq("id", id).maybeSingle();
-      if (error || !data || !data.is_public) { setRec(null); return; }
-      setRec(data);
-      if (data.upload_status === "ready") {
-        const { data: signed } = await supabase.storage.from("recordings").createSignedUrl(data.storage_path, 60 * 60 * 24);
-        setVideoUrl(signed?.signedUrl ?? null);
+      // 1. Try Supabase cloud recording
+      try {
+        const { data, error } = await supabase.from("recordings")
+          .select("id, title, storage_path, duration_seconds, created_at, upload_status, is_public")
+          .eq("id", id).maybeSingle();
+        if (!error && data) {
+          setRec(data);
+          if (data.upload_status === "ready" && data.storage_path) {
+            const { data: signed } = await supabase.storage.from("recordings").createSignedUrl(data.storage_path, 60 * 60 * 24);
+            if (signed?.signedUrl) {
+              setVideoUrl(signed.signedUrl);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("[SharePage] Supabase fetch failed, trying local store:", err);
       }
+
+      // 2. Fallback to local storage (IndexedDB)
+      try {
+        const local = await getLocalRecording(id);
+        if (local && local.blob) {
+          setRec({
+            id: local.id,
+            title: local.title,
+            storage_path: "",
+            duration_seconds: local.duration_seconds,
+            created_at: local.created_at,
+            upload_status: local.upload_status,
+          });
+          const url = URL.createObjectURL(local.blob);
+          setVideoUrl(url);
+          return;
+        }
+      } catch (err) {
+        console.warn("[SharePage] Local recording fetch failed:", err);
+      }
+
+      setRec(null);
     })();
   }, [id]);
 
   const copy = () => {
     navigator.clipboard.writeText(window.location.href);
     toast.success("Link copied");
+  };
+
+  const download = () => {
+    if (!videoUrl) return;
+    const a = document.createElement("a");
+    a.href = videoUrl;
+    a.download = `${rec?.title || "recording"}.webm`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success("Download started");
   };
 
   if (rec === undefined) {
@@ -62,7 +105,12 @@ function SharePage() {
           </div>
           <span className="font-semibold">Connect Orbital</span>
         </Link>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {videoUrl && (
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={download}>
+              <Download className="w-3.5 h-3.5" /> Download
+            </Button>
+          )}
           <Button size="sm" variant="secondary" className="gap-1.5" onClick={copy}>
             <Copy className="w-3.5 h-3.5" /> Copy link
           </Button>

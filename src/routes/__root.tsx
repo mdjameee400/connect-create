@@ -7,13 +7,13 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { onAuthUserChanged } from "@/lib/firebase";
+import { onAuthUserChanged, handleGoogleRedirectResult } from "@/lib/firebase";
 import { SiteAssistant } from "@/components/site-assistant";
 
 
@@ -108,27 +108,51 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const [hydrated, setHydrated] = useState(false);
 
+  // Mark component as hydrated on the client — prevents mismatch
   useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  // Process any pending Google redirect result on first mount
+  useEffect(() => {
+    if (!hydrated) return;
+    handleGoogleRedirectResult().catch(() => {});
+  }, [hydrated]);
+
+  // Subscribe to auth changes only after hydration is complete
+  // to avoid re-renders that trigger React error #418
+  useEffect(() => {
+    if (!hydrated) return;
+
+    // Skip first immediate callback to avoid invalidation during hydration settle
+    let fbInitFired = false;
     const unsubFb = onAuthUserChanged(() => {
+      if (!fbInitFired) {
+        fbInitFired = true;
+        return;
+      }
       router.invalidate();
       queryClient.invalidateQueries();
     });
+
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
       router.invalidate();
       if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
     });
+
     return () => {
       unsubFb();
       sub.subscription.unsubscribe();
     };
-  }, [router, queryClient]);
+  }, [router, queryClient, hydrated]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
-      <SiteAssistant />
+      {hydrated && <SiteAssistant />}
       <Toaster position="top-right" richColors />
     </QueryClientProvider>
   );
