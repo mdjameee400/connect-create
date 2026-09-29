@@ -2,6 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { LayoutGrid, PlaySquare, Calendar, Settings, Phone, HelpCircle, LogOut, Search, Bell, Loader2, Menu } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { logout, onAuthUserChanged } from "@/lib/firebase";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,17 +37,35 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
 
   useEffect(() => {
-    (async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        const { data: p } = await supabase.from("profiles").select("display_name, avatar_url").eq("id", data.user.id).maybeSingle();
+    const unsub = onAuthUserChanged(async (user) => {
+      if (user) {
+        let displayName = user.displayName;
+        let avatarUrl = user.photoURL;
+
+        // Try getting Supabase profile if exists
+        try {
+          const { data } = await supabase.auth.getUser();
+          if (data.user) {
+            const { data: p } = await supabase
+              .from("profiles")
+              .select("display_name, avatar_url")
+              .eq("id", data.user.id)
+              .maybeSingle();
+            if (p?.display_name) displayName = p.display_name;
+            if (p?.avatar_url) avatarUrl = p.avatar_url;
+          }
+        } catch {
+          // ignore
+        }
+
         setProfile({
-          name: p?.display_name ?? data.user.email?.split("@")[0] ?? "You",
-          email: data.user.email ?? "",
-          avatar: p?.avatar_url ?? null,
+          name: displayName ?? user.email?.split("@")[0] ?? "You",
+          email: user.email ?? "",
+          avatar: avatarUrl ?? null,
         });
       }
-    })();
+    });
+    return () => unsub();
   }, []);
 
   // Presence: ping on mount and every 2 minutes
@@ -89,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await queryClient.cancelQueries();
     queryClient.clear();
-    await supabase.auth.signOut();
+    await logout();
     toast.success("Signed out");
     navigate({ to: "/auth", replace: true });
   };

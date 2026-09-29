@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { auth } from "@/lib/firebase";
+import { updateProfile } from "firebase/auth";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +39,12 @@ function SettingsPage() {
     setSaving(true);
     const { data } = await supabase.auth.getUser();
     if (!data.user) return;
+    
+    // Update Firebase user profile
+    if (auth.currentUser && name.trim()) {
+      await updateProfile(auth.currentUser, { displayName: name.trim() }).catch(() => {});
+    }
+
     const { error } = await supabase.from("profiles").upsert({ id: data.user.id, display_name: name });
     setSaving(false);
     if (error) toast.error(error.message);

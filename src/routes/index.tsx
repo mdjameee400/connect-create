@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { onAuthUserChanged } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { ScrollProgress, SmoothLink, Reveal } from "@/components/scroll-motion";
@@ -52,9 +53,8 @@ function LandingPage() {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setSignedIn(!!data.user));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSignedIn(!!s));
-    return () => sub.subscription.unsubscribe();
+    const unsub = onAuthUserChanged((user) => setSignedIn(!!user));
+    return () => unsub();
   }, []);
 
   const primaryCta = signedIn

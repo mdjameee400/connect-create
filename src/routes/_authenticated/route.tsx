@@ -1,26 +1,25 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser, auth } from "@/lib/firebase";
 import { AppShell } from "@/components/app-shell";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async ({ location }) => {
     try {
-      // First try getSession() — reads from localStorage with no network round-trip.
-      // This prevents the race-condition redirect to /auth on initial page load.
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData?.session?.user) {
-        return { user: sessionData.session.user };
+      // Check current synchronous Firebase user first
+      let user = auth.currentUser;
+      if (!user) {
+        // Wait for initial Firebase auth state to resolve
+        user = await getCurrentUser();
       }
-      // No local session: do a full server-side verify
-      const { data, error } = await supabase.auth.getUser();
-      if (error || !data?.user) {
+
+      if (!user) {
         throw redirect({
           to: "/auth",
           search: { redirect: location.pathname },
         });
       }
-      return { user: data.user };
+      return { user };
     } catch (err) {
       if (err && typeof err === "object" && "to" in err) {
         throw err;

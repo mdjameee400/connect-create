@@ -74,7 +74,95 @@ let _supabase: ReturnType<typeof createSupabaseClient> | undefined;
 export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>, {
   get(_, prop, receiver) {
     if (!_supabase) _supabase = createSupabaseClient();
-    return Reflect.get(_supabase, prop, receiver);
+    const target = Reflect.get(_supabase, prop, receiver);
+
+    if (prop === "auth" && target) {
+      return new Proxy(target, {
+        get(authTarget, authProp, authReceiver) {
+          if (authProp === "getUser") {
+            return async (jwt?: string) => {
+              // Try Supabase auth first
+              const realRes = await Reflect.get(authTarget, "getUser", authReceiver).call(authTarget, jwt);
+              if (realRes?.data?.user) return realRes;
+
+              // Fallback to active Firebase user
+              if (typeof window !== "undefined") {
+                try {
+                  const { auth, firebaseUidToUuid } = await import("@/lib/firebase");
+                  const fbUser = auth.currentUser;
+                  if (fbUser) {
+                    return {
+                      data: {
+                        user: {
+                          id: firebaseUidToUuid(fbUser.uid),
+                          email: fbUser.email ?? "",
+                          role: "authenticated",
+                          aud: "authenticated",
+                          user_metadata: {
+                            full_name: fbUser.displayName,
+                            avatar_url: fbUser.photoURL,
+                          },
+                          app_metadata: {
+                            provider: "firebase",
+                          },
+                          created_at: fbUser.metadata.creationTime ?? new Date().toISOString(),
+                        } as any,
+                      },
+                      error: null,
+                    };
+                  }
+                } catch {
+                  // ignore
+                }
+              }
+              return realRes;
+            };
+          }
+
+          if (authProp === "getSession") {
+            return async () => {
+              const realRes = await Reflect.get(authTarget, "getSession", authReceiver).call(authTarget);
+              if (realRes?.data?.session) return realRes;
+
+              if (typeof window !== "undefined") {
+                try {
+                  const { auth, firebaseUidToUuid } = await import("@/lib/firebase");
+                  const fbUser = auth.currentUser;
+                  if (fbUser) {
+                    const token = await fbUser.getIdToken().catch(() => "");
+                    return {
+                      data: {
+                        session: {
+                          access_token: token,
+                          token_type: "bearer",
+                          user: {
+                            id: firebaseUidToUuid(fbUser.uid),
+                            email: fbUser.email ?? "",
+                            user_metadata: {
+                              full_name: fbUser.displayName,
+                              avatar_url: fbUser.photoURL,
+                            },
+                          },
+                        } as any,
+                      },
+                      error: null,
+                    };
+                  }
+                } catch {
+                  // ignore
+                }
+              }
+              return realRes;
+            };
+          }
+
+          return Reflect.get(authTarget, authProp, authReceiver);
+        },
+      });
+    }
+
+    return target;
   },
 });
+
 
